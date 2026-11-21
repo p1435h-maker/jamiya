@@ -196,7 +196,7 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 <div class="app">
   <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
   <header class="top">
-    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 4</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
+    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 5</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
     <button class="btn sm" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي">الوضع الليلي</button>
   </header>
   <main id="view"><div class="card empty">جارٍ تحميل بيانات الجمعية…</div></main>
@@ -222,6 +222,14 @@ function monthAfter(id){
   if (m > 12) { m = 1; y++; }
   return y + '-' + (m < 10 ? '0' : '') + m;
 }
+// حالة العضو في شهر معيّن: none قبل الانضمام، ثم active / frozen / ended حسب آخر حدث
+function memberStatusAt(m, monthId){
+  if (m.joined && monthId < m.joined) return 'none';
+  var st = 'active', at = '';
+  (m.events || []).forEach(function(e){ if (e.from <= monthId && e.from >= at) { st = e.status; at = e.from; } });
+  if (!m.events && m.active === false) st = 'frozen';
+  return st;
+}
 function compute(config, months, txs){
   config = config || {};
   var members = config.members || [];
@@ -229,7 +237,8 @@ function compute(config, months, txs){
   var acc = +((config.opening || {}).account || 0);
   var bal = {};
   var ob = (config.opening || {}).balances || {};
-  members.forEach(function(m){ bal[m.id] = +(ob[m.id] || 0); });
+  var started = {};
+  members.forEach(function(m){ bal[m.id] = +(ob[m.id] != null ? ob[m.id] : (m.openBal || 0)); });
   var byMonth = {};
   txs.forEach(function(t){ (byMonth[t.month] = byMonth[t.month] || []).push(t); });
   var out = [];
@@ -239,8 +248,10 @@ function compute(config, months, txs){
     var r = { id: mo.id, month: mo, openAcc: r2(acc), dep: 0, ext: 0, exp: 0, pay: 0, per: {}, tx: list, byCat: {} };
     var exempt = mo.exempt || [];
     members.forEach(function(m){
-      var charged = m.active !== false && exempt.indexOf(m.id) < 0;
-      r.per[m.id] = { open: r2(bal[m.id] || 0), contrib: charged ? q : 0, dep: 0, onb: 0, pay: 0, adj: 0 };
+      var st = memberStatusAt(m, mo.id);
+      if (st === 'none') return;
+      var charged = st === 'active' && exempt.indexOf(m.id) < 0;
+      r.per[m.id] = { open: r2(bal[m.id] || 0), contrib: charged ? q : 0, dep: 0, onb: 0, pay: 0, adj: 0, status: st };
     });
     list.forEach(function(t){
       var a = +t.amount || 0, k = KINDS[t.kind];
@@ -276,7 +287,7 @@ function compute(config, months, txs){
   });
   return out;
 }
-
+if (typeof module !== 'undefined') module.exports = { memberStatusAt: memberStatusAt, compute: compute, monthAfter: monthAfter, KINDS: KINDS };
 
 </script>
 <script>
@@ -333,7 +344,7 @@ function recompute(){
   }
 }
 function member(id){return (S.config&&S.config.members||[]).filter(function(m){return m.id===id;})[0]||{id:id,name:'عضو محذوف'};}
-function activeMembers(){return (S.config&&S.config.members||[]).filter(function(m){return m.active!==false;});}
+function activeMembers(id){id=id||S.sel;return (S.config&&S.config.members||[]).filter(function(m){return memberStatusAt(m,id||'9999-99')==='active';});}
 function calcOf(id){return S.calc.filter(function(c){return c.id===id;})[0];}
 function lastCalc(){return S.calc[S.calc.length-1];}
 function monthDoc(id){return S.months.filter(function(m){return m.id===id;})[0];}
@@ -389,13 +400,13 @@ function viewHome(){
   var first=S.calc[0];
   var ms=(S.config.members||[]);
   var maxAbs=1;ms.forEach(function(m){var p=c.per[m.id];if(p)maxAbs=Math.max(maxAbs,Math.abs(p.close));});
-  var rows=ms.map(function(m){
+  var rows=ms.filter(function(m){var p=c.per[m.id];return p&&!(p.status==='ended'&&Math.abs(p.close)<0.005);}).map(function(m){
     var p=c.per[m.id]||{close:0};var v=p.close;var w=Math.abs(v)/maxAbs*50;
     var startV=first&&first.per[m.id]?first.per[m.id].open:0;var d=r2(v-startV);
     var trend='';
     if(Math.abs(d)>0.005&&Math.abs(v)>0.005){trend=(v<0&&d<0)?'زاد دينه '+N(d)+' منذ '+shortMonth(first.id):(v<0&&d>0)?'نقص دينه '+N(d)+' منذ '+shortMonth(first.id):(v>0&&d>0)?'زادت مستحقاته '+N(d):'نقصت مستحقاته '+N(d);}
     var bar=v>=0?'<i style="inset-inline-start:50%;width:'+w+'%;background:var(--pos)"></i>':'<i style="inset-inline-end:50%;width:'+w+'%;background:var(--neg)"></i>';
-    return '<a class="mrow" href="#member-'+esc(m.id)+'">'+av(m)+'<div><div>'+esc(m.name)+(m.active===false?' <span class="pill zero">موقوف</span>':'')+'</div><div class="small muted">'+(trend||'&nbsp;')+'</div></div><div class="amt">'+balPill(v)+'</div></a>';
+    return '<a class="mrow" href="#member-'+esc(m.id)+'">'+av(m)+'<div><div>'+esc(m.name)+statusPill(m,lastCalc()&&lastCalc().id)+'</div><div class="small muted">'+(trend||'&nbsp;')+'</div></div><div class="amt">'+balPill(v)+'</div></a>';
   }).join('');
   var recent=S.tx.slice().sort(function(a,b){return (b.month+String(1e15+(b.seq||0))).localeCompare(a.month+String(1e15+(a.seq||0)));}).slice(0,6);
   var mo=monthDoc(c.id);
@@ -441,7 +452,7 @@ function txRow(t){
 
 function quickStatus(c){
   var q=+(monthDoc(c.id)||{}).contribution||0;
-  return activeMembers().map(function(m){
+  return activeMembers(c.id).map(function(m){
     var p=c.per[m.id]||{open:0,dep:0};
     var dep=c.tx.filter(function(t){return t.kind==='deposit'&&t.member===m.id;}).reduce(function(s,t){return s+(+t.amount||0);},0);
     var ex=((monthDoc(c.id)||{}).exempt||[]).indexOf(m.id)>=0;
@@ -471,7 +482,7 @@ function viewMonth(){
     if(p.onb) parts.push('+ <b>'+N(p.onb)+'</b> دفع نيابة');
     if(p.pay) parts.push('− <b>'+N(p.pay)+'</b> استلم');
     if(p.adj) parts.push((p.adj<0?'− ':'+ ')+'<b>'+N(p.adj)+'</b> تسوية');
-    return '<div class="mcard" style="border-inline-start:4px solid '+mColor(m.id)+'"><div class="hd"><a href="#member-'+esc(m.id)+'"><b>'+esc(m.name)+'</b></a>'+balPill(p.close)+'</div><div class="formula">'+parts.join(' &nbsp;')+'</div>'+(notes[m.id]?'<div class="mnote">'+esc(notes[m.id])+'</div>':'')+'</div>';
+    return '<div class="mcard" style="border-inline-start:4px solid '+mColor(m.id)+'"><div class="hd"><a href="#member-'+esc(m.id)+'"><b>'+esc(m.name)+'</b></a>'+statusPill(m,S.sel)+balPill(p.close)+'</div><div class="formula">'+parts.join(' &nbsp;')+'</div>'+(notes[m.id]?'<div class="mnote">'+esc(notes[m.id])+'</div>':'')+'</div>';
   }).join('');
   var groups=[['deposit','external'],['expense'],['payout'],['onbehalf','adjust']];
   var gnames=['دخل الحساب','مصروفات الحساب','تحويلات للأعضاء','خارج الحساب (نيابة وتسويات)'];
@@ -489,7 +500,7 @@ function viewMonth(){
     (!mo.closed&&S.canWrite?'<button type="button" class="btn sm gold" id="closeBtn">إقفال الشهر وبدء التالي</button>':'')+'</div></div>'+
     '<div class="flow"><div><span>باقي الشهر الماضي</span><b>'+SN(c.openAcc)+'</b></div><div><span>دخل الحساب</span><b class="plus">+'+fmt(c.inc)+'</b></div><div><span>صرف من الحساب</span><b class="minus">−'+fmt(c.out)+'</b></div><div class="end"><span>الباقي في الحساب</span><b'+(neg?' style="color:var(--neg)"':'')+'>'+SN(c.closeAcc)+'</b></div></div>'+
     '<div class="small muted" style="margin-top:10px">الصافي بعد تسوية ديون ومستحقات الأعضاء («المفترض» في الإكسل): <b class="num" style="color:var(--ink)">'+(c.net<0?'−':'')+fmt(c.net)+'</b></div>'+
-    (neg?'<div class="note bad" style="margin-top:10px">رصيد الحساب أقل من صفر. لا بد من دعم قبل إقفال الشهر.</div>':'')+
+    (neg?'<div class="note bad" style="margin-top:10px">رصيد الحساب أقل من صفر. لا بد من دعم قبل إقفال الشهر.</div>':'')+bankBox(c,mo,locked||!S.canWrite)+
   '</section>'+
   '<section class="card"><div class="card-h"><h2>القطة</h2><span class="small muted">اضغط على أي عضو لتسجيل قطته أو تعديلها أو إعفائه</span></div><div class="qgrid">'+qhtml+'</div></section>'+
   '<section class="card"><div class="card-h"><h2>حسابات الأعضاء هذا الشهر</h2></div><div class="mcards">'+mcards+'</div></section>'+
@@ -498,10 +509,10 @@ function viewMonth(){
 
 function viewMembers(){
   var c=lastCalc();
-  var rows=(S.config.members||[]).map(function(m){
+  var rows=(S.config.members||[]).filter(function(m){var p=c&&c.per[m.id];return !(p&&p.status==='ended'&&Math.abs(p.close)<0.005);}).map(function(m){
     var p=c&&c.per[m.id]||{close:0};
     var pi=planInfo(m.id);
-    return '<a class="mrow" href="#member-'+esc(m.id)+'">'+av(m)+'<div>'+esc(m.name)+(m.active===false?' <span class="pill zero">موقوف</span>':'')+(pi&&pi.debt>0?'<div class="small muted">خطة سداد '+Math.round(pi.pct)+'٪'+(pi.late.length?' · <span style="color:var(--neg)">متأخر</span>':'')+'</div>':'')+'</div><div class="amt">'+balPill(p.close)+'</div></a>';
+    return '<a class="mrow" href="#member-'+esc(m.id)+'">'+av(m)+'<div>'+esc(m.name)+statusPill(m,lastCalc()&&lastCalc().id)+(pi&&pi.debt>0?'<div class="small muted">خطة سداد '+Math.round(pi.pct)+'٪'+(pi.late.length?' · <span style="color:var(--neg)">متأخر</span>':'')+'</div>':'')+'</div><div class="amt">'+balPill(p.close)+'</div></a>';
   }).join('');
   return '<section class="card"><div class="card-h"><h2>الأعضاء</h2><span class="small muted">اضغط على الاسم لكشف الحساب</span></div><div class="mlist">'+rows+'</div></section>'+
   '<div class="note">«له» يعني أن الجمعية مدينة لهذا العضو (دفع أكثر مما عليه)، و«عليه» يعني أنه مدين للجمعية.</div>';
@@ -559,12 +570,11 @@ function lineChart(pts){
 
 function viewTools(){
   var ms=S.config.members||[];
-  var opts=ms.filter(function(m){return m.active!==false;}).map(function(m){return '<label class="check"><input type="checkbox" class="spl" value="'+esc(m.id)+'" checked> '+esc(m.name)+'</label>';}).join('');
-  var mem=ms.map(function(m,i){return '<div class="row" style="flex-wrap:nowrap"><input type="text" id="mn-'+i+'" data-mname="'+esc(m.id)+'" value="'+esc(m.name)+'" aria-label="اسم العضو"><label class="check" style="white-space:nowrap"><input type="checkbox" data-mact="'+esc(m.id)+'"'+(m.active!==false?' checked':'')+'> مشارك</label></div>';}).join('');
+  var opts=activeMembers(S.sel).map(function(m){return '<label class="check"><input type="checkbox" class="spl" value="'+esc(m.id)+'" checked> '+esc(m.name)+'</label>';}).join('');
   var mo=monthDoc(S.sel)||{};
   var cats=(S.config.categories||[]).map(function(c){return '<span class="chip">'+esc(c)+' <button type="button" class="x" style="width:22px;height:22px;font-size:13px" data-delcat="'+esc(c)+'" aria-label="حذف '+esc(c)+'">×</button></span>';}).join('');
   var w=S.canWrite;
-  return syncCard()+pinCard()+
+  return syncCard()+pinCard()+logCard()+
   '<section class="card"><div class="card-h"><div><h2>قسمة مبلغ على بعضنا</h2><div class="small muted">مصروف من حساب الجمعية يتحمله بعض الأعضاء فقط</div></div></div>'+
    '<div style="display:grid;gap:12px"><label class="f">المبلغ<input type="number" inputmode="decimal" id="splAmt" class="amount" placeholder="0"></label>'+
    '<div><div class="small muted" style="margin-bottom:6px">من يتحمل المبلغ؟</div><div class="row" style="gap:14px">'+opts+'</div></div>'+
@@ -577,7 +587,7 @@ function viewTools(){
  '<div class="small muted">التصدير إلى إكسل يحتاج إنترنت. النسخة الاحتياطية تعمل بدونه.</div>'+
  '<div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px"><h3>استرجاع من نسخة احتياطية</h3><label class="f">اختر ملف النسخة (json أو xlsx)<input type="file" id="rsFile" accept=".json,.xlsx"></label><div id="rsOut"></div></div></section>'+
   (w?'<section class="card"><div class="card-h"><h2>القطة الشهرية</h2></div><div class="row"><label class="f" style="flex:1">مبلغ القطة في '+esc(shortMonth(S.sel||''))+'<input type="number" inputmode="decimal" id="contribIn" value="'+esc(mo.contribution||0)+'"></label><button type="button" class="btn" id="contribSave" style="align-self:end">حفظ</button></div><div class="small muted" style="margin-top:6px">يُنقل نفس المبلغ تلقائياً للشهر التالي عند الإقفال.</div></section>'+
-  '<section class="card"><div class="card-h"><h2>الأعضاء</h2><span class="small muted">إلغاء «مشارك» يوقف خصم القطة عنه</span></div><div style="display:grid;gap:8px">'+mem+'<div class="row"><input type="text" id="newMember" placeholder="اسم عضو جديد" style="flex:1"><button type="button" class="btn" id="addMember">إضافة</button></div><button type="button" class="btn pri" id="saveMembers">حفظ تعديلات الأعضاء</button></div></section>'+
+  membersCard()+
   '<section class="card"><div class="card-h"><h2>بنود المصروفات</h2></div><div class="row">'+cats+'</div><div class="row" style="margin-top:10px"><input type="text" id="newCat" placeholder="بند جديد" style="flex:1"><button type="button" class="btn" id="addCat">إضافة</button></div></section>':'')+
   '';
 }
@@ -604,7 +614,7 @@ function entrySheet(existing,preset){
     var kinds=['deposit','expense','payout','onbehalf','external'].concat(t.kind==='adjust'?['adjust']:[]).map(function(kk){
       return '<button type="button" class="kind k-'+kk+'" data-kind="'+kk+'" aria-pressed="'+(t.kind===kk)+'"'+(ro?' disabled':'')+'><span class="ic">'+svg(kk)+'</span><b>'+KTXT[kk].t+'</b><span>'+KTXT[kk].s+'</span></button>';
     }).join('');
-    var mems=k.needsMember?'<div><div class="small muted" style="margin-bottom:6px">العضو</div><div class="chips" style="flex-wrap:wrap">'+(S.config.members||[]).filter(function(m){return m.active!==false||m.id===t.member;}).map(function(m){return '<button type="button" class="chip" data-mem="'+esc(m.id)+'" aria-pressed="'+(t.member===m.id)+'"'+(ro?' disabled':'')+'>'+esc(m.name)+'</button>';}).join('')+'</div></div>':'';
+    var mems=k.needsMember?'<div><div class="small muted" style="margin-bottom:6px">العضو</div><div class="chips" style="flex-wrap:wrap">'+(S.config.members||[]).filter(function(m){var s=memberStatusAt(m,t.month);return s==='active'||s==='frozen'||m.id===t.member;}).map(function(m){return '<button type="button" class="chip" data-mem="'+esc(m.id)+'" aria-pressed="'+(t.member===m.id)+'"'+(ro?' disabled':'')+'>'+esc(m.name)+'</button>';}).join('')+'</div></div>':'';
     var cats=t.kind==='expense'?'<div><div class="small muted" style="margin-bottom:6px">البند</div><div class="chips" style="flex-wrap:wrap">'+(S.config.categories||[]).map(function(c){return '<button type="button" class="chip" data-cat="'+esc(c)+'" aria-pressed="'+(t.category===c)+'"'+(ro?' disabled':'')+'>'+esc(c)+'</button>';}).join('')+'</div></div>':'';
     var q=+(monthDoc(t.month)||{}).contribution||1000;
     var quick=[q,q*2,500,1500].filter(function(v,i,a){return a.indexOf(v)===i;}).map(function(v){return '<button type="button" class="btn sm" data-amt="'+v+'"'+(ro?' disabled':'')+'>'+fmt(v)+'</button>';}).join('');
@@ -748,6 +758,7 @@ function bindView(){
   var ba=document.getElementById('bkAllow');if(ba)ba.addEventListener('click',function(){S.bk.folder?allowFolder():pickFolder();});
   if(route==='tools') bindTools();
   if(route==='reports') bindSearch();
+  if(route==='month') bindBank();
   if(route.indexOf('member-')===0) bindPlan(route.slice(7));
   if(route==='home') countUp();
   var hr=document.getElementById('homeReport');if(hr)hr.addEventListener('click',function(){S.sel=lastCalc().id;reportSheet();});
@@ -785,18 +796,7 @@ function bindTools(){
     var v=+document.getElementById('contribIn').value;if(!(v>=0)){toast('مبلغ غير صحيح');return;}
     S.db.collection('months').doc(S.sel).update({contribution:v}).then(function(){toast('تم الحفظ');}).catch(function(e){toast(errMsg(e));});
   });
-  var am=document.getElementById('addMember');if(am)am.addEventListener('click',function(){
-    var n=document.getElementById('newMember').value.trim();if(!n)return;
-    var ms=(S.config.members||[]).slice();var id='m'+Date.now().toString(36);ms.push({id:id,name:n});
-    S.db.doc('config/main').update({members:ms}).then(function(){toast('أُضيف '+n);}).catch(function(e){toast(errMsg(e));});
-  });
-  var sm=document.getElementById('saveMembers');if(sm)sm.addEventListener('click',function(){
-    var ms=(S.config.members||[]).map(function(m){
-      var ni=document.querySelector('[data-mname="'+m.id+'"]'),ai=document.querySelector('[data-mact="'+m.id+'"]');
-      var o={id:m.id,name:(ni&&ni.value.trim())||m.name};if(ai&&!ai.checked)o.active=false;return o;
-    });
-    S.db.doc('config/main').update({members:ms}).then(function(){toast('تم الحفظ');}).catch(function(e){toast(errMsg(e));});
-  });
+  bindMembersCard();
   var ac=document.getElementById('addCat');if(ac)ac.addEventListener('click',function(){
     var n=document.getElementById('newCat').value.trim();var cs=(S.config.categories||[]).slice();if(!n||cs.indexOf(n)>=0)return;cs.push(n);
     S.db.doc('config/main').update({categories:cs}).catch(function(e){toast(errMsg(e));});
@@ -1067,6 +1067,95 @@ function reportSheet(){
   if(document.fonts&&document.fonts.ready)document.fonts.ready.then(go);else go();
 }
 
+// ===== حالة الأعضاء: انضمام، تجميد، إعادة، إنهاء =====
+function statusAt(m,id){return memberStatusAt(m,id||S.sel||'9999-99');}
+function statusPill(m,id){var s=statusAt(m,id);return s==='frozen'?' <span class="pill gold">مجمّد</span>':s==='ended'?' <span class="pill zero">منتهي</span>':s==='none'?' <span class="pill zero">ينضم '+esc(shortMonth(m.joined))+'</span>':'';}
+function liveMembers(id){return (S.config&&S.config.members||[]).filter(function(m){var s=statusAt(m,id);return s==='active'||s==='frozen';});}
+function balanceAt(mid,id){var c=calcOf(id);return c&&c.per[mid]?c.per[mid]:null;}
+function setEvents(m,from,status){
+  var ev=(m.events||[]).filter(function(e){return e.from<from;});ev.push({from:from,status:status});return ev;
+}
+function saveMember(mid,patch){
+  var ms=(S.config.members||[]).map(function(m){return m.id===mid?Object.assign({},m,patch):m;});
+  return S.db.doc('config/main').update({members:ms});
+}
+function gapCharge(m,uptoId){
+  var sum=0,months=[];
+  S.calc.forEach(function(c){if(c.id>=uptoId)return;var s=statusAt(m,c.id);if(s==='frozen'||s==='ended'){sum+=+(monthDoc(c.id)||{}).contribution||0;months.push(c.id);}});
+  // فقط الفترة الأخيرة المتصلة من التوقف
+  var cont=[];for(var i=months.length-1;i>=0;i--){if(i===months.length-1||months[i]===prevMonth(months[i+1]))cont.unshift(months[i]);else break;}
+  if(cont.length&&cont[cont.length-1]!==prevMonth(uptoId))cont=[];
+  sum=cont.reduce(function(s,id){return s+(+(monthDoc(id)||{}).contribution||0);},0);
+  return {sum:sum,months:cont};
+}
+function prevMonth(id){var y=+id.slice(0,4),m=+id.slice(5,7)-1;if(m<1){m=12;y--;}return y+'-'+(m<10?'0':'')+m;}
+function membersCard(){
+  var ms=S.config.members||[],sel=S.sel;
+  var rows=ms.map(function(m){
+    var p=balanceAt(m.id,sel);
+    return '<div class="row" style="justify-content:space-between;flex-wrap:nowrap;padding:6px 0;border-bottom:1px solid var(--line)"><div class="row" style="flex-wrap:nowrap">'+av(m)+'<div><b>'+esc(m.name)+'</b>'+statusPill(m,sel)+(p?'<div class="small muted">نهاية '+esc(shortMonth(sel))+': '+(p.close>0?'له ':p.close<0?'عليه ':'')+fmt(Math.abs(p.close))+'</div>':'')+'</div></div><button type="button" class="btn sm" data-mmanage="'+esc(m.id)+'">إدارة</button></div>';
+  }).join('');
+  return '<section class="card"><div class="card-h"><h2>الأعضاء</h2><span class="small muted">التغييرات تبدأ من الشهر المختار: '+esc(shortMonth(sel))+'</span></div><div>'+rows+'</div>'+
+   '<div style="display:grid;gap:8px;margin-top:12px"><h3>إضافة عضو جديد</h3><input type="text" id="newMember" placeholder="الاسم">'+
+   '<div class="row"><input type="number" inputmode="decimal" id="newMemberBal" placeholder="رصيده عند الانضمام (اتركه فارغاً إن لم يوجد)" style="flex:1"><label class="check"><input type="radio" name="nmSign" value="1" checked> له</label><label class="check"><input type="radio" name="nmSign" value="-1"> عليه</label></div>'+
+   '<button type="button" class="btn pri" id="addMember">إضافة، وتبدأ قطته من '+esc(shortMonth(sel))+'</button></div></section>';
+}
+function bindMembersCard(){
+  document.querySelectorAll('[data-mmanage]').forEach(function(b){b.addEventListener('click',function(){memberSheet(b.getAttribute('data-mmanage'));});});
+  var am=document.getElementById('addMember');if(am)am.addEventListener('click',function(){
+    var n=document.getElementById('newMember').value.trim();if(!n){toast('اكتب الاسم');return;}
+    var v=+document.getElementById('newMemberBal').value||0;var sg=+((document.querySelector('input[name=nmSign]:checked')||{}).value||1);
+    var ms=(S.config.members||[]).slice();ms.push({id:'m'+Date.now().toString(36),name:n,joined:S.sel,openBal:r2(v*sg)});
+    S.db.doc('config/main').update({members:ms}).then(function(){toast('أُضيف '+n);});
+  });
+}
+function memberSheet(mid){
+  var m=member(mid),sel=S.sel,st=statusAt(m,sel),p=balanceAt(mid,sel)||{open:0,close:0};
+  var hasTx=S.tx.some(function(t){return t.member===mid&&t.month===sel;});
+  var g=gapCharge(m,sel);
+  var html='<div class="sheet-h"><h2>إدارة '+esc(m.name)+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
+    '<div class="small muted">الحالة في '+esc(shortMonth(sel))+': '+({active:'نشط',frozen:'مجمّد',ended:'منتهي',none:'لم ينضم بعد'})[st]+(m.joined?' · انضم '+esc(monthLabel(m.joined)):'')+' · رصيده نهاية الشهر: '+balPill(p.close)+'</div>'+
+    '<label class="f">الاسم<input type="text" id="msName" value="'+esc(m.name)+'"></label><button type="button" class="btn" id="msRename">حفظ الاسم</button>';
+  if(st==='active')html+='<div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px"><b>تجميد من '+esc(shortMonth(sel))+'</b><div class="small muted">لا تُحسب عليه القطة أثناء التجميد، ويبقى رصيده كما هو حتى التسوية. الأشهر السابقة لا تتغير.</div><button type="button" class="btn gold" id="msFreeze">تجميد</button></div>';
+  if(st==='frozen'||st==='ended')html+='<div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px"><b>إعادته نشطاً من '+esc(shortMonth(sel))+'</b>'+
+    (g.sum?'<label class="check"><input type="radio" name="gap" value="0" checked> لا تحسب قطات فترة التوقف</label><label class="check"><input type="radio" name="gap" value="1"> احسب قطات فترة التوقف كاملة: '+N(g.sum)+' ('+esc(g.months.map(shortMonth).join('، '))+')</label>':'')+
+    '<button type="button" class="btn pri" id="msActive">إعادة تنشيط</button></div>';
+  if(st==='active'||st==='frozen')html+='<div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px"><b>إنهاء العضوية</b>'+
+    (Math.abs(p.close)>0.005?'<div class="note small">لا يمكن إنهاء عضويته وعليه أو له '+N(Math.abs(p.close))+'. سوِّ الرصيد أولاً حتى يصير صفراً، أو جمّده حتى التسوية.</div>':'<div class="small muted">رصيده صفر، فيمكن إنهاء عضويته. يبقى ظاهراً في الأشهر السابقة.</div><button type="button" class="btn danger" id="msEnd">إنهاء العضوية</button>')+'</div>';
+  html+='<div id="msErr"></div>';
+  openSheet(html,function(el){
+    el.querySelector('#msRename').addEventListener('click',function(){var n=el.querySelector('#msName').value.trim();if(n)saveMember(mid,{name:n}).then(function(){closeSheet();});});
+    var f=el.querySelector('#msFreeze');if(f)f.addEventListener('click',function(){saveMember(mid,{events:setEvents(m,sel,'frozen')}).then(function(){closeSheet();toast('جُمّد '+m.name+' من '+shortMonth(sel));});});
+    var a=el.querySelector('#msActive');if(a)a.addEventListener('click',function(){
+      var charge=g.sum&&((el.querySelector('input[name=gap]:checked')||{}).value==='1');
+      saveMember(mid,{events:setEvents(m,sel,'active')}).then(function(){
+        if(charge)return S.db.collection('tx').doc().set({month:sel,kind:'adjust',member:mid,amount:r2(-g.sum),note:'قطات فترة التوقف ('+g.months.map(shortMonth).join('، ')+')',seq:Date.now(),createdAt:new Date().toISOString(),by:S.uid||''});
+      }).then(function(){closeSheet();toast('أُعيد '+m.name+' نشطاً');});
+    });
+    var e=el.querySelector('#msEnd');if(e)e.addEventListener('click',function(){
+      var from=(Math.abs(p.open)<0.005&&!hasTx&&!p.contrib)?sel:monthAfter(sel);
+      saveMember(mid,{events:setEvents(m,from,'ended')}).then(function(){closeSheet();toast('تنتهي عضوية '+m.name+' من '+shortMonth(from));});
+    });
+  });
+}
+
+// ===== مطابقة رصيد البنك =====
+function bankBox(c,mo,locked){
+  var has=mo.bank!=null&&mo.bank!=='';
+  return '<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px;display:grid;gap:8px"><div class="row" style="align-items:end"><label class="f" style="flex:1;min-width:180px">رصيد البنك حسب تطبيق البنك<input type="number" inputmode="decimal" id="bankIn" value="'+(has?esc(mo.bank):'')+'" placeholder="اكتب الرصيد الظاهر في البنك"'+(locked?' disabled':'')+'></label><div id="bankRes" style="padding-bottom:8px">'+bankResult(c,has?+mo.bank:null)+'</div></div></div>';
+}
+function bankResult(c,v){
+  if(v==null||isNaN(v))return '<span class="pill zero">لم تتم المطابقة</span>';
+  var d=r2(v-c.closeAcc);
+  if(Math.abs(d)<0.01)return '<span class="pill pos">'+svg('check','style="width:12px;height:12px"')+' مطابق تماماً</span>';
+  return '<span class="pill neg">الفرق '+N(Math.abs(d))+'</span> <span class="small muted">'+(d>0?'البنك أكثر من البرنامج: غالباً دخل لم يُسجَّل':'البنك أقل من البرنامج: غالباً مصروف لم يُسجَّل')+'</span>';
+}
+function bindBank(){
+  var i=document.getElementById('bankIn');if(!i)return;
+  i.addEventListener('input',function(){document.getElementById('bankRes').innerHTML=bankResult(calcOf(S.sel),i.value===''?null:+i.value);});
+  i.addEventListener('change',function(){var v=i.value===''?null:r2(+i.value);var mo=monthDoc(S.sel);if((mo.bank==null?null:+mo.bank)===v)return;S.db.collection('months').doc(S.sel).update({bank:v});});
+}
+
 // ===== الوضع الليلي =====
 (function(){
   var k='jam-theme',t=null;try{t=localStorage.getItem(k);}catch(e){}
@@ -1231,7 +1320,7 @@ var Store=(function(){
   }
   function merge(id,rec){
     if(!rec||typeof rec.u!=='number'||!rec.o)return false;
-    if(!/^(config\/main|months\/[\w-]+|tx\/[\w-]+)$/.test(id))return false;
+    if(!/^(config\/main|months\/[\w-]+|tx\/[\w-]+|log\/[\w-]+)$/.test(id))return false;
     var cur=st.recs[id];
     if(!cur||rec.u>cur.u||(rec.u===cur.u&&rec.o>cur.o)){st.recs[id]=rec;return true;}
     return false;
@@ -1409,10 +1498,10 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
 // ===== التراجع =====
 var Undo={g:null,t:0,silent:false};
 function undoCapture(id,cur){
-  if(Undo.silent)return;
+  if(Undo.silent||id.indexOf('log/')===0)return;
   if(!Undo.g)Undo.g={};
   if(!(id in Undo.g))Undo.g[id]=cur&&!cur.del?JSON.parse(JSON.stringify(cur.d)):null;
-  clearTimeout(Undo.t);Undo.t=setTimeout(function(){var g=Undo.g;Undo.g=null;undoToast(g);},300);
+  clearTimeout(Undo.t);Undo.t=setTimeout(function(){var g=Undo.g;Undo.g=null;try{logGroup(g);}catch(e){}undoToast(g);},300);
 }
 function undoToast(g){
   var old=document.getElementById('undoBar');if(old)old.remove();
@@ -1421,8 +1510,9 @@ function undoToast(g){
   document.body.appendChild(d);
   var tm=setTimeout(function(){d.remove();},7000);
   d.querySelector('button').addEventListener('click',function(){
-    clearTimeout(tm);d.remove();Undo.silent=true;
+    clearTimeout(tm);d.remove();var before={};Object.keys(g).forEach(function(id){var r=Store.st.recs[id];before[id]=r&&!r.del?r.d:null;});Undo.silent=true;
     try{Object.keys(g).forEach(function(id){Store.write(id,g[id]);});}finally{Undo.silent=false;}
+    try{logGroup(before,'تراجع عن: ');}catch(e){}
     toast('تم التراجع');
   });
 }
@@ -1478,6 +1568,66 @@ function bindPinCard(){
 var hiddenLockAt=0;
 document.addEventListener('visibilitychange',function(){if(document.hidden)hiddenLockAt=Date.now();else if(Store.st.pinHash&&Date.now()-hiddenLockAt>60000)showLock();});
 if(Store.st.pinHash)showLock();
+
+// ===== سجل التعديلات =====
+function logDescribe(id,prev,next){
+  var mon=function(m){return m?shortMonth(m):'';};
+  if(id.indexOf('tx/')===0){
+    var t=next||prev;if(!t)return '';
+    var who=t.member?member(t.member).name:(t.category||(t.kind==='external'?'دخل خارجي':''));
+    var what=(KTXT[t.kind]?KTXT[t.kind].short:'حركة')+(who?' · '+who:'')+' · '+fmt(Math.abs(+t.amount||0));
+    var verb=!prev?'إضافة':!next?'حذف':'تعديل';
+    if(prev&&next&&+prev.amount!==+next.amount)what+=' (كان '+fmt(Math.abs(+prev.amount||0))+')';
+    return verb+': '+what+' — '+mon(t.month);
+  }
+  if(id.indexOf('months/')===0){
+    var mid=id.slice(7);
+    if(!prev)return 'بدء شهر '+monthLabel(mid);
+    if(!next)return 'حذف شهر '+mon(mid);
+    if(!prev.closed&&next.closed)return 'إقفال شهر '+mon(mid);
+    if(prev.closed&&!next.closed)return 'فتح شهر '+mon(mid);
+    if(JSON.stringify(prev.exempt||[])!==JSON.stringify(next.exempt||[])){var a=(next.exempt||[]).filter(function(x){return (prev.exempt||[]).indexOf(x)<0;}),r=(prev.exempt||[]).filter(function(x){return (next.exempt||[]).indexOf(x)<0;});return (a.length?'إعفاء '+a.map(function(x){return member(x).name;}).join('، '):'إلغاء إعفاء '+r.map(function(x){return member(x).name;}).join('، '))+' من قطة '+mon(mid);}
+    if(prev.bank!==next.bank)return 'مطابقة البنك في '+mon(mid)+': '+(next.bank==null?'مسح':fmt(next.bank));
+    if(+prev.contribution!==+next.contribution)return 'تغيير القطة في '+mon(mid)+' إلى '+fmt(next.contribution);
+    return 'تعديل شهر '+mon(mid);
+  }
+  if(id==='config/main'){
+    if(!prev)return 'إنشاء الجمعية';
+    if(JSON.stringify(prev.members)!==JSON.stringify(next.members)){
+      var pm={};(prev.members||[]).forEach(function(m){pm[m.id]=m;});
+      var out=[];(next.members||[]).forEach(function(m){var o=pm[m.id];if(!o)out.push('إضافة عضو: '+m.name);else{if(o.name!==m.name)out.push('تغيير اسم '+o.name+' إلى '+m.name);if(JSON.stringify(o.events||[])!==JSON.stringify(m.events||[])){var e=(m.events||[])[(m.events||[]).length-1]||{};out.push(({frozen:'تجميد',active:'إعادة تنشيط',ended:'إنهاء عضوية'})[e.status]+' '+m.name+' من '+mon(e.from));}}});
+      return out.join(' · ')||'تعديل الأعضاء';
+    }
+    if(JSON.stringify(prev.plans||{})!==JSON.stringify(next.plans||{}))return 'تعديل خطة سداد';
+    if(JSON.stringify(prev.categories)!==JSON.stringify(next.categories))return 'تعديل بنود المصروفات';
+    return 'تعديل الإعدادات';
+  }
+  return '';
+}
+function writeLog(label){
+  if(!label)return;Undo.silent=true;
+  try{Store.write('log/'+Date.now().toString(36)+Store.rid().slice(0,4),{at:Date.now(),dev:Store.st.name||'',l:label});}finally{Undo.silent=false;}
+}
+function logGroup(g,prefix){
+  var ids=Object.keys(g).filter(function(k){return k.indexOf('log/')!==0;});if(!ids.length)return;
+  var cur=function(id){var r=Store.st.recs[id];return r&&!r.del?r.d:null;};
+  if(ids.length>6){writeLog((prefix||'')+'تعديل جماعي: '+ids.length+' تغيير');return;}
+  var parts=ids.map(function(id){return logDescribe(id,g[id],cur(id));}).filter(Boolean);
+  if(parts.length)writeLog((prefix||'')+parts.join(' · '));
+}
+function pruneLogs(){
+  var ks=Object.keys(Store.st.recs).filter(function(k){return k.indexOf('log/')===0;});
+  if(ks.length<=400)return;
+  ks.sort(function(a,b){return (Store.st.recs[a].u)-(Store.st.recs[b].u);}).slice(0,ks.length-400).forEach(function(k){delete Store.st.recs[k];});Store.save();
+}
+function logCard(){
+  var ks=Object.keys(Store.st.recs).filter(function(k){var r=Store.st.recs[k];return k.indexOf('log/')===0&&r&&!r.del&&r.d;});
+  var items=ks.map(function(k){return Store.st.recs[k].d;}).sort(function(a,b){return b.at-a.at;}).slice(0,60);
+  return '<section class="card" style="display:grid;gap:8px"><div class="card-h" style="margin:0"><h2>سجل التعديلات</h2><span class="small muted">آخر '+items.length+' تغيير من كل الأجهزة</span></div>'+
+   (items.length?'<div style="display:grid;max-height:420px;overflow:auto">'+items.map(function(it){var d=new Date(it.at);return '<div style="padding:8px 2px;border-bottom:1px solid var(--line)"><div class="small">'+esc(it.l)+'</div><div class="small muted">'+esc(it.dev||'جهاز')+' · '+esc(d.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn'))+' '+esc(d.toLocaleTimeString('ar-SA-u-nu-latn',{hour:'2-digit',minute:'2-digit'}))+'</div></div>';}).join('')+'</div>':'<div class="small muted">لا توجد تعديلات بعد. كل تغيير من الآن يُسجَّل هنا.</div>')+'</section>';
+}
+
+pruneLogs();
 
 })();
 </script>
