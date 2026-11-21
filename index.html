@@ -109,6 +109,9 @@ nav.tabs a[aria-current="page"]{color:var(--accent);background:var(--accent-soft
 .q{border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;gap:6px;background:var(--surface)}
 .q .st{font-size:12px}
 .q button{justify-self:start}
+.qbtn{text-align:start;cursor:pointer;font:inherit;color:inherit}
+.qbtn:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
+.qbtn:disabled{cursor:default}
 
 .btn{border:0;border-radius:10px;padding:9px 16px;cursor:pointer;font-weight:500;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);display:inline-flex;align-items:center;gap:6px;justify-content:center}
 .btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -429,7 +432,8 @@ function quickStatus(c){
   return activeMembers().map(function(m){
     var p=c.per[m.id]||{open:0,dep:0};
     var dep=c.tx.filter(function(t){return t.kind==='deposit'&&t.member===m.id;}).reduce(function(s,t){return s+(+t.amount||0);},0);
-    var state=dep>=q&&q>0?'paid':(p.open-q>=0?'credit':'due');
+    var ex=((monthDoc(c.id)||{}).exempt||[]).indexOf(m.id)>=0;
+    var state=ex?'exempt':dep>=q&&q>0?'paid':(p.open-q>=0?'credit':'due');
     return {m:m,state:state,dep:dep,q:q,open:p.open};
   });
 }
@@ -442,9 +446,9 @@ function viewMonth(){
   var q=+mo.contribution||0;
   var qs=quickStatus(c);
   var qhtml=qs.map(function(x){
-    var st=x.state==='paid'?'<span class="pill pos">'+svg('check','style="width:12px;height:12px"')+' دفع '+N(x.dep)+'</span>':x.state==='credit'?'<span class="pill acc">تُخصم من رصيده</span>':'<span class="pill neg">لم يدفع</span>';
-    var btn=(x.state==='due'&&!locked&&S.canWrite)?'<button type="button" class="btn sm pri" data-quick="'+esc(x.m.id)+'">سجّل '+N(q)+'</button>':'';
-    return '<div class="q"><b>'+esc(x.m.name)+'</b><div class="st">'+st+'</div>'+btn+'</div>';
+    var st=x.state==='paid'?'<span class="pill pos">'+svg('check','style="width:12px;height:12px"')+' دفع '+N(x.dep)+'</span>':x.state==='exempt'?'<span class="pill zero">معفى هذا الشهر</span>':x.state==='credit'?'<span class="pill acc">تُخصم من رصيده</span>':'<span class="pill neg">لم يدفع</span>';
+    var can=!locked&&S.canWrite;
+    return '<button type="button" class="q qbtn" data-qcard="'+esc(x.m.id)+'"'+(can?'':' disabled')+'><b>'+esc(x.m.name)+'</b><div class="st">'+st+'</div>'+(can?'<span class="small muted">اضغط للتعديل</span>':'')+'</button>';
   }).join('');
   var notes=mo.notes||{};
   var mcards=(S.config.members||[]).map(function(m){
@@ -474,7 +478,7 @@ function viewMonth(){
     '<div class="small muted" style="margin-top:10px">الصافي بعد تسوية ديون ومستحقات الأعضاء («المفترض» في الإكسل): <b class="num" style="color:var(--ink)">'+(c.net<0?'−':'')+fmt(c.net)+'</b></div>'+
     (neg?'<div class="note bad" style="margin-top:10px">رصيد الحساب أقل من صفر. لا بد من دعم قبل إقفال الشهر.</div>':'')+
   '</section>'+
-  '<section class="card"><div class="card-h"><h2>القطة</h2><span class="small muted">من عنده رصيد كافٍ تُخصم منه تلقائياً</span></div><div class="qgrid">'+qhtml+'</div></section>'+
+  '<section class="card"><div class="card-h"><h2>القطة</h2><span class="small muted">اضغط على أي عضو لتسجيل قطته أو تعديلها أو إعفائه</span></div><div class="qgrid">'+qhtml+'</div></section>'+
   '<section class="card"><div class="card-h"><h2>حسابات الأعضاء هذا الشهر</h2></div><div class="mcards">'+mcards+'</div></section>'+
   '<section class="card"><div class="card-h"><h2>الحركات</h2><span class="small muted">'+c.tx.length+' حركة · اضغط أي حركة لتعديلها</span></div><div class="txl">'+(txh||'<div class="empty">لا توجد حركات في هذا الشهر بعد. اضغط «حركة جديدة».</div>')+'</div></section>';
 }
@@ -692,15 +696,36 @@ function closeMonthSheet(){
   });
 }
 
+
+function quickSheet(mid){
+  var c=calcOf(S.sel),mo=monthDoc(S.sel),m=member(mid),q=+mo.contribution||0;
+  var x=quickStatus(c).filter(function(y){return y.m.id===mid;})[0]||{state:'due',dep:0,open:0};
+  var deps=c.tx.filter(function(t){return t.kind==='deposit'&&t.member===mid;});
+  var ex=(mo.exempt||[]).indexOf(mid)>=0;
+  var p=c.per[mid]||{open:0,close:0};
+  var html='<div class="sheet-h"><h2>قطة '+esc(m.name)+' · '+esc(shortMonth(S.sel))+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
+    '<div class="small muted">رصيده في بداية الشهر: '+balPill(p.open)+' · بعد هذا الشهر: '+balPill(p.close)+'</div>'+
+    (deps.length?'<div><div class="small muted" style="margin-bottom:4px">ما حوّله هذا الشهر (اضغط للتعديل أو الحذف):</div><div class="txl">'+deps.map(txRow).join('')+'</div></div>':'<div class="note small">لم يُسجَّل له تحويل هذا الشهر.'+(x.state==='credit'?' القطة تُخصم من رصيده تلقائياً.':'')+'</div>')+
+    (ex?'':'<button type="button" class="btn pri" id="qPay">سجّل أنه حوّل القطة '+N(q)+'</button>')+
+    '<button type="button" class="btn" id="qOther">سجّل مبلغاً آخر منه</button>'+
+    '<button type="button" class="btn'+(ex?' gold':'')+'" id="qEx">'+(ex?'إلغاء الإعفاء: تُحسب عليه القطة هذا الشهر':'إعفاء من قطة هذا الشهر')+'</button>'+
+    '<div id="qErr"></div>';
+  openSheet(html,function(el){
+    el.querySelectorAll('[data-tx]').forEach(function(b){b.addEventListener('click',function(){var t=S.tx.filter(function(y){return y.id===b.getAttribute('data-tx');})[0];if(t)entrySheet(t);});});
+    var pay=el.querySelector('#qPay');if(pay)pay.addEventListener('click',function(){pay.disabled=true;
+      S.db.collection('tx').doc().set({month:S.sel,kind:'deposit',member:mid,amount:q,note:'القطة',seq:Date.now(),createdAt:new Date().toISOString(),by:S.uid||''}).then(function(){closeSheet();toast('سُجّلت قطة '+m.name);}).catch(function(e){pay.disabled=false;toast(errMsg(e));});});
+    el.querySelector('#qOther').addEventListener('click',function(){entrySheet(null,{kind:'deposit',member:mid,month:S.sel});});
+    el.querySelector('#qEx').addEventListener('click',function(){
+      var list=(mo.exempt||[]).filter(function(i){return i!==mid;});if(!ex)list.push(mid);
+      S.db.collection('months').doc(S.sel).update({exempt:list}).then(function(){closeSheet();toast(ex?'أُلغي الإعفاء':'أُعفي '+m.name+' هذا الشهر');}).catch(function(e){toast(errMsg(e));});
+    });
+  });
+}
 function bindView(){
   var v=document.getElementById('view');
   v.querySelectorAll('[data-tx]').forEach(function(b){b.addEventListener('click',function(){var t=S.tx.filter(function(x){return x.id===b.getAttribute('data-tx');})[0];if(t)entrySheet(t);});});
   v.querySelectorAll('[data-sel]').forEach(function(b){b.addEventListener('click',function(){S.sel=b.getAttribute('data-sel');render();});});
-  v.querySelectorAll('[data-quick]').forEach(function(b){b.addEventListener('click',function(){
-    var mo=monthDoc(S.sel);b.disabled=true;
-    S.db.collection('tx').doc().set({month:S.sel,kind:'deposit',member:b.getAttribute('data-quick'),amount:+mo.contribution||0,note:'القطة',seq:Date.now(),createdAt:new Date().toISOString(),by:S.uid||''})
-    .then(function(){toast('سُجّلت القطة');}).catch(function(e){b.disabled=false;toast(errMsg(e));});
-  });});
+  v.querySelectorAll('[data-qcard]').forEach(function(b){b.addEventListener('click',function(){quickSheet(b.getAttribute('data-qcard'));});});
   var ub=document.getElementById('unlockBtn');if(ub)ub.addEventListener('click',function(){
     openSheet('<div class="sheet-h"><h2>فتح شهر مقفل</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div><p style="margin:0">أي تعديل في '+esc(shortMonth(S.sel))+' يغيّر أرصدة كل الأشهر التي بعده تلقائياً. هذا مفيد لتصحيح خطأ قديم.</p><button type="button" class="btn gold" id="uGo">فتح للتعديل في هذه الجلسة</button>',function(m){m.querySelector('#uGo').addEventListener('click',function(){S.unlocked[S.sel]=true;closeSheet();render();});});
   });
