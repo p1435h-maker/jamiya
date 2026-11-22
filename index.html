@@ -196,7 +196,7 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 <div class="app">
   <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
   <header class="top">
-    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 6</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
+    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 7</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
     <button class="btn sm" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي">الوضع الليلي</button>
   </header>
   <main id="view"><div class="card empty">جارٍ تحميل بيانات الجمعية…</div></main>
@@ -514,6 +514,7 @@ function viewMonth(){
   return yearChips(S.sel.slice(0,4),'data-ychip')+chips+anchorBanner(c)+
   '<section class="card"><div class="card-h"><div><h2>'+esc(mo.label||monthLabel(S.sel))+' <span class="small muted" style="font-family:var(--font-body);font-weight:400">'+esc(hijriOf(S.sel))+'</span></h2><div class="small muted">القطة هذا الشهر '+N(q)+' ريال لكل عضو'+(mo.closed?' · <span class="lock">'+svg('lock')+' مقفل</span>':' · مفتوح')+'</div></div>'+
     '<div class="row">'+(mo.closed&&S.canWrite?(locked?'<button type="button" class="btn sm" id="unlockBtn">'+svg('unlock')+' فتح للتعديل</button>':'<span class="pill gold">مفتوح للتعديل مؤقتاً</span>'):'')+
+    (S.canWrite&&S.sel===firstMonthId()?'<button type="button" class="btn sm" id="openEdit">تعديل أرصدة البداية</button>':'')+
     '<button type="button" class="btn sm" id="monthReport">صورة التقرير</button>'+
     (!mo.closed&&S.canWrite?'<button type="button" class="btn sm gold" id="closeBtn">إقفال الشهر وبدء التالي</button>':'')+'</div></div>'+
     '<div class="flow"><div><span>باقي الشهر الماضي</span><b>'+SN(c.openAcc)+'</b></div><div><span>دخل الحساب</span><b class="plus">+'+fmt(c.inc)+'</b></div><div><span>صرف من الحساب</span><b class="minus">−'+fmt(c.out)+'</b></div><div class="end"><span>الباقي في الحساب</span><b'+(neg?' style="color:var(--neg)"':'')+'>'+SN(c.closeAcc)+'</b></div></div>'+
@@ -769,6 +770,26 @@ function quickSheet(mid){
     });
   });
 }
+
+function openingSheet(){
+  var f=firstMonthId(),op=S.config.opening||{account:0,balances:{}},ob=op.balances||{};
+  var ms=(S.config.members||[]).filter(function(m){return memberStatusAt(m,f)!=='none';});
+  var row=function(m){var v=ob[m.id]!=null?+ob[m.id]:(+m.openBal||0);var a=Math.abs(v);
+    return '<div class="row" style="flex-wrap:nowrap;gap:8px"><span style="min-width:80px">'+esc(m.name)+'</span><input type="number" inputmode="decimal" data-obv="'+esc(m.id)+'" value="'+(a||'')+'" placeholder="0" style="flex:1;direction:ltr;text-align:center">'+
+    '<label class="check"><input type="radio" name="obs-'+esc(m.id)+'" value="1"'+(v>=0?' checked':'')+'> له</label><label class="check"><input type="radio" name="obs-'+esc(m.id)+'" value="-1"'+(v<0?' checked':'')+'> عليه</label></div>';};
+  var html='<div class="sheet-h"><h2>أرصدة البداية · '+esc(monthLabel(f))+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
+    '<div class="small muted">هذه الأرصدة قبل أول شهر في البرنامج. أي تعديل هنا يغيّر أرقام كل الأشهر بعده تلقائياً.</div>'+
+    '<label class="f">رصيد حساب الجمعية (باقي الشهر الماضي)<input type="number" inputmode="decimal" id="obAcc" value="'+(+op.account||0)+'" style="direction:ltr;text-align:center"></label>'+
+    '<div class="small muted">رصيد كل عضو:</div><div style="display:grid;gap:8px">'+ms.map(row).join('')+'</div>'+
+    '<button type="button" class="btn pri" id="obSave">حفظ أرصدة البداية</button>';
+  openSheet(html,function(el){
+    el.querySelector('#obSave').addEventListener('click',function(){
+      var bal=Object.assign({},ob);
+      el.querySelectorAll('[data-obv]').forEach(function(i){var id=i.getAttribute('data-obv');var sg=+((el.querySelector('input[name="obs-'+id+'"]:checked')||{}).value||1);bal[id]=r2((+i.value||0)*sg);});
+      S.db.doc('config/main').update({opening:{account:r2(+el.querySelector('#obAcc').value||0),balances:bal}}).then(function(){closeSheet();toast('حُفظت أرصدة البداية');});
+    });
+  });
+}
 function bindView(){
   var v=document.getElementById('view');
   v.querySelectorAll('[data-tx]').forEach(function(b){b.addEventListener('click',function(){var t=S.tx.filter(function(x){return x.id===b.getAttribute('data-tx');})[0];if(t)entrySheet(t);});});
@@ -782,6 +803,7 @@ function bindView(){
   if(route==='tools') bindTools();
   if(route==='reports') bindSearch();
   if(route==='month') bindBank();
+  var oe=document.getElementById('openEdit');if(oe)oe.addEventListener('click',openingSheet);
   bindYears();bindAnchors();
   document.querySelectorAll('[data-gosel]').forEach(function(b){b.addEventListener('click',function(){S.sel=b.getAttribute('data-gosel');location.hash='#month';render();});});
   if(route.indexOf('member-')===0) bindPlan(route.slice(7));
@@ -1141,7 +1163,8 @@ function memberSheet(mid){
   var g=gapCharge(m,sel);
   var html='<div class="sheet-h"><h2>إدارة '+esc(m.name)+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
     '<div class="small muted">الحالة في '+esc(shortMonth(sel))+': '+({active:'نشط',frozen:'مجمّد',ended:'منتهي',none:'لم ينضم بعد'})[st]+(m.joined?' · انضم '+esc(monthLabel(m.joined)):'')+' · رصيده نهاية الشهر: '+balPill(p.close)+'</div>'+
-    '<label class="f">الاسم<input type="text" id="msName" value="'+esc(m.name)+'"></label><button type="button" class="btn" id="msRename">حفظ الاسم</button>';
+    '<label class="f">الاسم<input type="text" id="msName" value="'+esc(m.name)+'"></label><button type="button" class="btn" id="msRename">حفظ الاسم</button>'+
+    (m.joined&&m.joined>firstMonthId()?'<div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px"><b>رصيده عند الانضمام ('+esc(monthLabel(m.joined))+')</b><div class="row"><input type="number" inputmode="decimal" id="msOpen" value="'+(Math.abs(+m.openBal||0)||'')+'" placeholder="0" style="flex:1;direction:ltr;text-align:center"><label class="check"><input type="radio" name="msOs" value="1"'+((+m.openBal||0)>=0?' checked':'')+'> له</label><label class="check"><input type="radio" name="msOs" value="-1"'+((+m.openBal||0)<0?' checked':'')+'> عليه</label></div><button type="button" class="btn" id="msOpenSave">حفظ رصيد الانضمام</button></div>':'');
   if(st==='active')html+='<div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px"><b>تجميد من '+esc(shortMonth(sel))+'</b><div class="small muted">لا تُحسب عليه القطة أثناء التجميد، ويبقى رصيده كما هو حتى التسوية. الأشهر السابقة لا تتغير.</div><button type="button" class="btn gold" id="msFreeze">تجميد</button></div>';
   if(st==='frozen'||st==='ended')html+='<div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px"><b>إعادته نشطاً من '+esc(shortMonth(sel))+'</b>'+
     (g.sum?'<label class="check"><input type="radio" name="gap" value="0" checked> لا تحسب قطات فترة التوقف</label><label class="check"><input type="radio" name="gap" value="1"> احسب قطات فترة التوقف كاملة: '+N(g.sum)+' ('+esc(g.months.map(shortMonth).join('، '))+')</label>':'')+
@@ -1150,6 +1173,7 @@ function memberSheet(mid){
     (Math.abs(p.close)>0.005?'<div class="note small">لا يمكن إنهاء عضويته وعليه أو له '+N(Math.abs(p.close))+'. سوِّ الرصيد أولاً حتى يصير صفراً، أو جمّده حتى التسوية.</div>':'<div class="small muted">رصيده صفر، فيمكن إنهاء عضويته. يبقى ظاهراً في الأشهر السابقة.</div><button type="button" class="btn danger" id="msEnd">إنهاء العضوية</button>')+'</div>';
   html+='<div id="msErr"></div>';
   openSheet(html,function(el){
+    var mo2=el.querySelector('#msOpenSave');if(mo2)mo2.addEventListener('click',function(){var sg=+((el.querySelector('input[name=msOs]:checked')||{}).value||1);saveMember(mid,{openBal:r2((+el.querySelector('#msOpen').value||0)*sg)}).then(function(){closeSheet();toast('حُفظ رصيد الانضمام');});});
     el.querySelector('#msRename').addEventListener('click',function(){var n=el.querySelector('#msName').value.trim();if(n)saveMember(mid,{name:n}).then(function(){closeSheet();});});
     var f=el.querySelector('#msFreeze');if(f)f.addEventListener('click',function(){saveMember(mid,{events:setEvents(m,sel,'frozen')}).then(function(){closeSheet();toast('جُمّد '+m.name+' من '+shortMonth(sel));});});
     var a=el.querySelector('#msActive');if(a)a.addEventListener('click',function(){
@@ -1823,6 +1847,7 @@ function logDescribe(id,prev,next){
       var out=[];(next.members||[]).forEach(function(m){var o=pm[m.id];if(!o)out.push('إضافة عضو: '+m.name);else{if(o.name!==m.name)out.push('تغيير اسم '+o.name+' إلى '+m.name);if(JSON.stringify(o.events||[])!==JSON.stringify(m.events||[])){var e=(m.events||[])[(m.events||[]).length-1]||{};out.push(({frozen:'تجميد',active:'إعادة تنشيط',ended:'إنهاء عضوية'})[e.status]+' '+m.name+' من '+mon(e.from));}}});
       return out.join(' · ')||'تعديل الأعضاء';
     }
+    if(JSON.stringify(prev.opening)!==JSON.stringify(next.opening)&&prev.firstMonth===next.firstMonth&&JSON.stringify(prev.anchors||[])===JSON.stringify(next.anchors||[]))return 'تعديل أرصدة البداية في '+mon(next.firstMonth||firstMonthId());
     if(JSON.stringify(prev.anchors||[])!==JSON.stringify(next.anchors||[])&&JSON.stringify(prev.opening)===JSON.stringify(next.opening))return 'معالجة فرق الترحيل بين السنوات';
     if(JSON.stringify(prev.opening)!==JSON.stringify(next.opening))return 'إضافة أشهر سابقة (من '+mon(next.firstMonth)+' '+String(next.firstMonth||'').slice(0,4)+')';
     if(JSON.stringify(prev.plans||{})!==JSON.stringify(next.plans||{}))return 'تعديل خطة سداد';
