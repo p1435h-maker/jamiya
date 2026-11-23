@@ -113,6 +113,7 @@ nav.tabs a[aria-current="page"]{color:var(--accent);background:var(--accent-soft
 .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .q{border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;gap:6px;background:var(--surface)}
 .q .st{font-size:12px}
+.q .pill{white-space:normal}
 .q button{justify-self:start}
 .qbtn{text-align:start;cursor:pointer;font:inherit;color:inherit}
 .qbtn:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
@@ -196,7 +197,7 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 <div class="app">
   <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
   <header class="top">
-    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 7</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
+    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 8</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
     <button class="btn sm" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي">الوضع الليلي</button>
   </header>
   <main id="view"><div class="card empty">جارٍ تحميل بيانات الجمعية…</div></main>
@@ -474,8 +475,9 @@ function quickStatus(c){
     var p=c.per[m.id]||{open:0,dep:0};
     var dep=c.tx.filter(function(t){return t.kind==='deposit'&&t.member===m.id;}).reduce(function(s,t){return s+(+t.amount||0);},0);
     var ex=((monthDoc(c.id)||{}).exempt||[]).indexOf(m.id)>=0;
-    var state=ex?'exempt':dep>=q&&q>0?'paid':(p.open-q>=0?'credit':'due');
-    return {m:m,state:state,dep:dep,q:q,open:p.open};
+    var onb=c.tx.filter(function(t){return t.kind==='onbehalf'&&t.member===m.id;}).reduce(function(s,t){return s+(+t.amount||0);},0);
+    var state=ex?'exempt':(q>0&&dep>=q)?'paid':(q>0&&dep+onb>=q)?'covered':(dep+onb>0)?'partial':(p.open-q>=0?'credit':'due');
+    return {m:m,state:state,dep:dep,onb:onb,q:q,open:p.open};
   });
 }
 
@@ -487,7 +489,7 @@ function viewMonth(){
   var q=+mo.contribution||0;
   var qs=quickStatus(c);
   var qhtml=qs.map(function(x){
-    var st=x.state==='paid'?'<span class="pill pos">'+svg('check','style="width:12px;height:12px"')+' دفع '+N(x.dep)+'</span>':x.state==='exempt'?'<span class="pill zero">معفى هذا الشهر</span>':x.state==='credit'?'<span class="pill acc">تُخصم من رصيده</span>':'<span class="pill neg">لم يدفع</span>';
+    var st=x.state==='covered'?'<span class="pill acc" title="ما دفعه من جيبه عن الجمعية يغطي القطة">دفعها نيابةً عن الجمعية</span>':x.state==='partial'?'<span class="pill gold">دفع '+N(x.dep+x.onb)+' من '+N(x.q)+'</span>':x.state==='paid'?'<span class="pill pos">'+svg('check','style="width:12px;height:12px"')+' دفع '+N(x.dep)+'</span>':x.state==='exempt'?'<span class="pill zero">معفى هذا الشهر</span>':x.state==='credit'?'<span class="pill acc">تُخصم من رصيده</span>':'<span class="pill neg">لم يدفع</span>';
     var can=!locked&&S.canWrite;
     return '<button type="button" class="q qbtn" data-qcard="'+esc(x.m.id)+'"'+(can?'':' disabled')+'><b>'+esc(x.m.name)+'</b><div class="st">'+st+'</div>'+(can?'<span class="small muted">اضغط للتعديل</span>':'')+'</button>';
   }).join('');
@@ -511,7 +513,8 @@ function viewMonth(){
     return '<div class="sec-t"><span>'+gnames[i]+'</span><span>'+N(sum)+'</span></div>'+l.map(txRow).join('');
   }).join('');
   var neg=c.closeAcc<0;
-  return yearChips(S.sel.slice(0,4),'data-ychip')+chips+anchorBanner(c)+
+  var yy=S.sel.slice(0,4),oldOpen=S.canWrite&&yearsList()[0]!==yy&&monthsOfYear(yy).some(function(id){return !(monthDoc(id)||{}).closed;});
+  return yearChips(S.sel.slice(0,4),'data-ychip')+(oldOpen?'<div class="note small row" style="justify-content:space-between"><span>سنة '+yy+' فيها أشهر مفتوحة. بعد ما تكمل إدخالها، أرشفها من «التقارير».</span><button type="button" class="btn sm" data-goarch="'+yy+'">أرشفتها الآن</button></div>':'')+chips+anchorBanner(c)+
   '<section class="card"><div class="card-h"><div><h2>'+esc(mo.label||monthLabel(S.sel))+' <span class="small muted" style="font-family:var(--font-body);font-weight:400">'+esc(hijriOf(S.sel))+'</span></h2><div class="small muted">القطة هذا الشهر '+N(q)+' ريال لكل عضو'+(mo.closed?' · <span class="lock">'+svg('lock')+' مقفل</span>':' · مفتوح')+'</div></div>'+
     '<div class="row">'+(mo.closed&&S.canWrite?(locked?'<button type="button" class="btn sm" id="unlockBtn">'+svg('unlock')+' فتح للتعديل</button>':'<span class="pill gold">مفتوح للتعديل مؤقتاً</span>'):'')+
     (S.canWrite&&S.sel===firstMonthId()?'<button type="button" class="btn sm" id="openEdit">تعديل أرصدة البداية</button>':'')+
@@ -805,6 +808,7 @@ function bindView(){
   if(route==='month') bindBank();
   var oe=document.getElementById('openEdit');if(oe)oe.addEventListener('click',openingSheet);
   bindYears();bindAnchors();
+  document.querySelectorAll('[data-goarch]').forEach(function(b){b.addEventListener('click',function(){S.ry=b.getAttribute('data-goarch');location.hash='#reports';setTimeout(function(){var a=document.getElementById('yearArchive');if(a)a.click();},150);});});
   document.querySelectorAll('[data-gosel]').forEach(function(b){b.addEventListener('click',function(){S.sel=b.getAttribute('data-gosel');location.hash='#month';render();});});
   if(route.indexOf('member-')===0) bindPlan(route.slice(7));
   if(route==='home') countUp();
@@ -1075,8 +1079,8 @@ function reportCanvas(id,showBal){
     x.fillStyle='#fff';rr(x,bx,by,cw,70,16);x.fill();
     var mc=mColor(s.m.id);x.fillStyle=mc;rr(x,bx+cw-10,by+14,6,42,3);x.fill();
     x.fillStyle='#15242A';x.font='500 30px '+F;x.textAlign='right';x.fillText(s.m.name,bx+cw-30,by+46);
-    var lab=s.state==='paid'?'✓ دفع '+fmt(s.dep):s.state==='exempt'?'معفى':s.state==='credit'?'من رصيده':'لم يدفع';
-    x.fillStyle=s.state==='paid'?'#1D7A47':s.state==='due'?'#B23A30':'#5D6B6F';x.font='500 26px '+F;x.textAlign='left';x.fillText(lab,bx+24,by+45);
+    var lab=s.state==='covered'?'مغطاة نيابة':s.state==='partial'?'دفع '+fmt(s.dep+s.onb)+' من '+fmt(s.q):s.state==='paid'?'✓ دفع '+fmt(s.dep):s.state==='exempt'?'معفى':s.state==='credit'?'من رصيده':'لم يدفع';
+    x.fillStyle=s.state==='paid'?'#1D7A47':s.state==='due'?'#B23A30':s.state==='partial'?'#B5832A':'#5D6B6F';x.font='500 26px '+F;x.textAlign='left';x.fillText(lab,bx+24,by+45);
   });
   y+=Math.ceil(qs.length/2)*86+60;
   if(cats.length){head('أهم المصروفات');y+=10;var mx=cats[0][1];
@@ -1229,7 +1233,7 @@ function yearSummaryCard(){
   var title=y==='all'?'كل السنوات':'سنة '+y;
   var span=esc(shortMonth(first.id))+' '+first.id.slice(0,4)+' – '+esc(shortMonth(last.id))+' '+last.id.slice(0,4);
   var change=r2(last.closeAcc-first.openAcc);
-  return '<section class="card" style="display:grid;gap:12px"><div class="card-h" style="margin:0"><div><h2>ملخص '+esc(title)+(y!=='all'&&yearArchived(y)?' <span class="pill zero" style="font-family:var(--font-body)">مؤرشفة</span>':'')+'</h2><div class="small muted">'+span+' · '+rows.length+' شهر</div></div>'+(S.dl?'<button type="button" class="btn sm" id="yearXls">تصدير '+esc(title)+' إلى إكسل</button>':'')+'</div>'+
+  return '<section class="card" style="display:grid;gap:12px"><div class="card-h" style="margin:0"><div><h2>ملخص '+esc(title)+(y!=='all'&&yearArchived(y)?' <span class="pill zero" style="font-family:var(--font-body)">مؤرشفة</span>':'')+'</h2><div class="small muted">'+span+' · '+rows.length+' شهر</div></div>'+'<div class="row">'+(y!=='all'&&S.canWrite&&yearsList()[0]!==y&&monthsOfYear(y).some(function(id){return !(monthDoc(id)||{}).closed;})?'<button type="button" class="btn sm gold" id="yearArchive">أرشفة سنة '+y+'</button>':'')+(S.dl?'<button type="button" class="btn sm" id="yearXls">تصدير '+esc(title)+' إلى إكسل</button>':'')+'</div></div>'+
    '<div class="flow"><div><span>رصيد الحساب في البداية</span><b>'+SN(first.openAcc)+'</b></div><div><span>دخل الحساب</span><b class="plus">+'+fmt(t.dep+t.ext+Math.max(0,t.adj))+'</b></div><div><span>صرف من الحساب</span><b class="minus">−'+fmt(t.exp+t.pay+Math.max(0,-t.adj))+'</b></div><div class="end"><span>رصيد الحساب في النهاية</span><b>'+SN(last.closeAcc)+'</b></div></div>'+
    '<div class="small muted">تغيّر رصيد الحساب خلال الفترة: <b class="num" style="color:var(--ink)">'+(change<0?'−':'+')+fmt(change)+'</b> · من الأعضاء '+N(t.dep)+' · دخل خارجي '+N(t.ext)+' · مصروفات '+N(t.exp)+' · للأعضاء '+N(t.pay)+' · الصافي في النهاية '+SN(last.net)+'</div>'+
    '<div class="tbl-wrap"><table><thead><tr><th>العضو</th><th class="n">رصيده في البداية</th><th class="n">القطة</th><th class="n">حوّل</th><th class="n">نيابة</th><th class="n">استلم</th><th class="n">تسوية</th><th class="n">رصيده في النهاية</th></tr></thead><tbody>'+mrows+'</tbody></table></div></section>';
@@ -1237,6 +1241,12 @@ function yearSummaryCard(){
 function bindYears(){
   document.querySelectorAll('[data-ychip]').forEach(function(b){b.addEventListener('click',function(){var y=b.getAttribute('data-ychip');var ms=monthsOfYear(y);if(ms.length){S.sel=ms[ms.length-1];render();}});});
   document.querySelectorAll('[data-rychip]').forEach(function(b){b.addEventListener('click',function(){S.ry=b.getAttribute('data-rychip');render();});});
+  var ya=document.getElementById('yearArchive');if(ya)ya.addEventListener('click',function(){
+    var y=reportYear(),open=monthsOfYear(y).filter(function(id){return !(monthDoc(id)||{}).closed;});
+    openSheet('<div class="sheet-h"><h2>أرشفة سنة '+y+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div><p style="margin:0">تُقفل كل أشهر '+y+' المفتوحة ('+open.map(shortMonth).join('، ')+')، وتظهر السنة «مؤرشفة». تبقى قادراً على فتح أي شهر منها للتعديل لاحقاً من صفحة الشهر.</p><button type="button" class="btn gold block" id="yaGo">أرشفة</button>',function(el){
+      el.querySelector('#yaGo').addEventListener('click',function(){var p=Promise.resolve();open.forEach(function(id){p=p.then(function(){return S.db.collection('months').doc(id).update({closed:true});});});p.then(function(){closeSheet();toast('أُرشفت سنة '+y);});});
+    });
+  });
   var yx=document.getElementById('yearXls');if(yx)yx.addEventListener('click',function(){EXP_Y=reportYear();saveBackup(yx,yx.textContent).then(function(){EXP_Y=null;});});
 }
 var EXP_Y=null;
@@ -1863,6 +1873,7 @@ function writeLog(label){
 function logGroup(g,prefix){
   var ids=Object.keys(g).filter(function(k){return k.indexOf('log/')!==0;});if(!ids.length)return;
   var cur=function(id){var r=Store.st.recs[id];return r&&!r.del?r.d:null;};
+  if(ids.length>1&&ids.every(function(id){var n=cur(id);return id.indexOf('months/')===0&&n&&n.closed&&g[id]&&!g[id].closed;})){writeLog((prefix||'')+'أرشفة '+ids.length+' شهر ('+ids.map(function(id){return id.slice(7);}).sort()[0].slice(0,4)+')');return;}
   if(ids.length>6){writeLog((prefix||'')+'تعديل جماعي: '+ids.length+' تغيير');return;}
   var parts=ids.map(function(id){return logDescribe(id,g[id],cur(id));}).filter(Boolean);
   if(parts.length)writeLog((prefix||'')+parts.join(' · '));
