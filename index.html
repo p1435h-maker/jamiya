@@ -100,6 +100,8 @@ nav.tabs a[aria-current="page"]{color:var(--accent);background:var(--accent-soft
 
 .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;white-space:nowrap;cursor:pointer;font-size:13.5px;display:inline-flex;align-items:center;gap:6px}
+.chips-wrap{flex-wrap:wrap;overflow:visible}
+.chips-wrap .chip{padding:6px 12px}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .chip svg{width:13px;height:13px}
 
@@ -188,7 +190,11 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 .formula b{color:var(--ink);font-weight:500}
 .mcard{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:6px}
 .mcards{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
-.mcard .hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mcard .hd{display:flex;align-items:center;gap:8px}
+.mcard .hdn{flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mbtn{background:var(--accent-soft);color:var(--accent);border-color:transparent;white-space:nowrap;padding:4px 10px;font-size:12.5px}
+.mbtn:hover{background:var(--accent);color:var(--accent-ink)}
+@media (max-width:400px){.mbtn{padding:3px 8px;font-size:11.5px}}
 .mnote{font-size:12px;color:var(--gold);background:var(--gold-soft);border-radius:8px;padding:3px 8px;justify-self:start}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .22s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
 </style>
@@ -197,7 +203,7 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 <div class="app">
   <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
   <header class="top">
-    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 13</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
+    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 14</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
     <button class="btn sm" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي">الوضع الليلي</button>
   </header>
   <main id="view"><div class="card empty">جارٍ تحميل بيانات الجمعية…</div></main>
@@ -324,7 +330,7 @@ if (typeof module !== 'undefined') module.exports = { contributionOf: contributi
 var MONTHS_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 var KTXT={
   deposit:{t:'عضو حوّل للجمعية',s:'القطة أو تسديد دين',short:'تحويل للحساب'},
-  expense:{t:'صرف من حساب الجمعية',s:'كهرباء، راتب، علاج…',short:'مصروف'},
+  expense:{t:'صرف من حساب الجمعية لغير الأعضاء',s:'كهرباء، راتب، علاج…',short:'مصروف'},
   payout:{t:'الجمعية حوّلت لعضو',s:'سلفة له أو تسديد ما له',short:'استلم من الحساب'},
   onbehalf:{t:'عضو دفع من جيبه',s:'عن الجمعية ولم يمر بالحساب',short:'دفع نيابة'},
   external:{t:'دخل من خارج الأعضاء',s:'دعم، عائد، هدية',short:'دخل خارجي'},
@@ -504,10 +510,10 @@ function quickStatus(c){
 }
 
 function viewMonth(){
-  var ids=S.sel?monthsOfYear(S.sel.slice(0,4)).reverse():[];
+  var ids=S.sel?monthsOfYear(S.sel.slice(0,4)):[];
   if(!S.sel) return '<div class="card empty">لا يوجد شهر بعد.</div>';
   var c=calcOf(S.sel), mo=monthDoc(S.sel), locked=isLocked(S.sel);
-  var chips='<div class="chips" role="group" aria-label="اختر الشهر">'+ids.map(function(id){var m=monthDoc(id);return '<button type="button" class="chip" data-sel="'+id+'" aria-pressed="'+(id===S.sel)+'">'+(m.closed?svg('lock'):'')+esc(shortMonth(id))+' '+id.slice(2,4)+'</button>';}).join('')+'</div>';
+  var chips='<div class="chips chips-wrap" role="group" aria-label="اختر الشهر">'+ids.map(function(id){var m=monthDoc(id);return '<button type="button" class="chip" data-sel="'+id+'" aria-pressed="'+(id===S.sel)+'">'+(m.closed?svg('lock'):'')+esc(shortMonth(id))+' '+id.slice(2,4)+'</button>';}).join('')+'</div>';
   var q=monthQ(S.sel);
   var qs=quickStatus(c);
   var notes=mo.notes||{};
@@ -516,14 +522,14 @@ function viewMonth(){
     var p=c.per[m.id];if(!p)return '';
     var x=qsm[m.id];
     var qline=x?'<div class="row" style="gap:6px"><span class="small muted">القطة:</span>'+qPill(x)+'</div>':'';
-    var acts=canAct?'<div class="row" style="margin-top:2px"><button type="button" class="btn sm pri" data-qedit="'+esc(m.id)+'">حركات العضو</button></div>':'';
+    var acts=canAct?'<button type="button" class="btn sm mbtn" data-qedit="'+esc(m.id)+'">حركات العضو</button>':'';
     var parts=['<b>'+SN(p.open)+'</b> البداية'];
     if(p.contrib) parts.push('− <b>'+N(p.contrib)+'</b> القطة');
     if(p.dep) parts.push('+ <b>'+N(p.dep)+'</b> حوّل');
     if(p.onb) parts.push('+ <b>'+N(p.onb)+'</b> دفع نيابة');
     if(p.pay) parts.push('− <b>'+N(p.pay)+'</b> استلم');
     if(p.adj) parts.push((p.adj<0?'− ':'+ ')+'<b>'+N(p.adj)+'</b> تسوية');
-    return '<div class="mcard" style="border-inline-start:4px solid '+mColor(m.id)+'"><div class="hd"><a href="#member-'+esc(m.id)+'"><b>'+esc(m.name)+'</b></a>'+statusPill(m,S.sel)+balPill(p.close)+'</div><div class="formula">'+parts.join(' &nbsp;')+'</div>'+qline+(notes[m.id]?'<div class="mnote">'+esc(notes[m.id])+'</div>':'')+acts+'</div>';
+    return '<div class="mcard" style="border-inline-start:4px solid '+mColor(m.id)+'"><div class="hd"><span class="hdn"><a href="#member-'+esc(m.id)+'"><b>'+esc(m.name)+'</b></a>'+statusPill(m,S.sel)+'</span>'+acts+balPill(p.close)+'</div><div class="formula">'+parts.join(' &nbsp;')+'</div>'+qline+(notes[m.id]?'<div class="mnote">'+esc(notes[m.id])+'</div>':'')+'</div>';
   }).join('');
   var groups=[['deposit','external'],['expense'],['payout'],['onbehalf','adjust']];
   var gnames=['دخل الحساب','مصروفات الحساب','تحويلات للأعضاء','خارج الحساب (نيابة وتسويات)'];
@@ -669,7 +675,7 @@ function entrySheet(existing,preset,onDone){
     var by=existing&&existing.by&&S.names[existing.by]?'<div class="small muted">أضافها: '+esc(S.names[existing.by])+'</div>':'';
     return '<div class="sheet-h"><h2>'+(existing?'تفاصيل الحركة':'حساب الجمعية')+' · '+esc(shortMonth(t.month))+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
       (locked?'<div class="note">هذا الشهر مقفل. افتحه للتعديل من صفحة الشهر.</div>':'')+
-      (!existing&&!preset?'<div class="small muted">حركات الأعضاء (القطة، النيابة، التحويل لهم) تُسجَّل من بطاقة العضو في قسم «القطة».</div>':'')+
+      (!existing&&!preset?'<div class="small muted">حركات الأعضاء (القطة، النيابة، التحويل لهم) تُسجَّل من زر «حركات العضو» في بطاقته.</div>':'')+
       (!t.kind?'<div class="note small">اختر نوع الحركة أولاً.</div><div class="kinds">'+kinds+'</div>':'<div class="kinds">'+kinds+'</div>'+mems+
       '<label class="f">المبلغ (ريال)<input type="number" inputmode="decimal" id="eAmt" class="amount" value="'+esc((t.kind==='adjust'||t.kind==='accadj')?t.amount:(t.amount===''?'':Math.abs(t.amount)))+'" placeholder="0"'+(ro?' disabled':'')+'></label><div class="row">'+quick+'</div>'+
       cats+'<label class="f">ملاحظة<input type="text" id="eNote" value="'+esc(t.note||'')+'" placeholder="مثال: تسديد دين، كهرباء البيت القديم"'+(ro?' disabled':'')+'></label>'+fixedBox+
@@ -791,7 +797,7 @@ function quickSheet(mid,openForm){
   var html='<div class="sheet-h"><div class="brand">'+av(m)+'<div><h2>'+esc(m.name)+' · '+esc(shortMonth(S.sel))+'</h2><div class="small muted">رصيده: '+balPill(p.open)+' ← بعد الشهر: '+balPill(p.close)+'</div></div></div><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
     (isLocked(S.sel)?'<div class="note small">الشهر مقفل. افتحه للتعديل من صفحة الشهر.</div>':'')+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-      (ex?'<span></span>':btn('qPay','دفع القطة '+fmt(q),'pri'))+btn('qDep','حوّل للجمعية مبلغاً آخر')+
+      (ex?'<span></span>':(x.state==='paid'||x.state==='covered')?'<button type="button" class="btn" disabled style="min-height:48px">القطة مدفوعة ✓</button>':btn('qPay','دفع القطة '+fmt(q),'pri'))+btn('qDep','حوّل للجمعية مبلغاً آخر')+
       btn('qOnb','دفع نيابة عن الجمعية')+btn('qPout','حوّلت له الجمعية')+
     '</div><div id="qForm"></div>'+
     '<div style="border-top:1px solid var(--line);padding-top:6px"><h3 style="margin:6px 0 2px">ما سُجّل له هذا الشهر</h3>'+
@@ -805,7 +811,7 @@ function quickSheet(mid,openForm){
   openSheet(html,function(el){
     el.querySelectorAll('[data-qtx]').forEach(function(b){b.addEventListener('click',function(){var t=S.tx.filter(function(y){return y.id===b.getAttribute('data-qtx');})[0];if(t)entrySheet(t,null,function(){quickSheet(mid);});});});
     var pay=el.querySelector('#qPay');if(pay)pay.addEventListener('click',function(){pay.disabled=true;
-      S.db.collection('tx').doc().set({month:S.sel,kind:'deposit',member:mid,amount:q,note:'القطة',seq:Date.now(),createdAt:new Date().toISOString(),by:S.uid||''}).then(function(){quickSheet(mid);}).catch(function(e){pay.disabled=false;toast(errMsg(e));});});
+      S.db.collection('tx').doc().set({month:S.sel,kind:'deposit',member:mid,amount:q,note:'القطة',seq:Date.now(),createdAt:new Date().toISOString(),by:S.uid||''}).then(function(){closeSheet();}).catch(function(e){pay.disabled=false;toast(errMsg(e));});});
     var forms={qDep:['deposit','حوّل للجمعية','مثال: تسديد دين، جزء من القطة'],qOnb:['onbehalf','دفع نيابة عن الجمعية','البيان: راتب العامل، فاتورة…'],qPout:['payout','حوّلت له الجمعية','السبب: سلفة، تسديد له']};
     function showForm(key){
       var f=forms[key],box=el.querySelector('#qForm');
@@ -1279,7 +1285,7 @@ function monthsOfYear(y){return S.months.map(function(m){return m.id;}).filter(f
 function yearArchived(y){var ys=yearsList();return ys[0]!==y&&monthsOfYear(y).every(function(id){return (monthDoc(id)||{}).closed;});}
 function yearChips(cur,attr,withAll){
   var ys=yearsList();if(ys.length<2&&!withAll)return '';
-  return '<div class="chips" role="group" aria-label="اختر السنة" style="margin-bottom:-4px">'+(withAll?'<button type="button" class="chip" '+attr+'="all" aria-pressed="'+(cur==='all')+'">كل السنوات</button>':'')+ys.map(function(y){return '<button type="button" class="chip" '+attr+'="'+y+'" aria-pressed="'+(cur===y)+'">'+y+(yearArchived(y)?' · مؤرشفة':'')+'</button>';}).join('')+'</div>';
+  return '<div class="chips chips-wrap" role="group" aria-label="اختر السنة" style="margin-bottom:-4px">'+(withAll?'<button type="button" class="chip" '+attr+'="all" aria-pressed="'+(cur==='all')+'">كل السنوات</button>':'')+ys.slice().reverse().map(function(y){return '<button type="button" class="chip" '+attr+'="'+y+'" aria-pressed="'+(cur===y)+'">'+y+(yearArchived(y)?' · مؤرشفة':'')+'</button>';}).join('')+'</div>';
 }
 S.ry=null;
 function reportYear(){var ys=yearsList();if(S.ry!=='all'&&ys.indexOf(S.ry)<0)S.ry=ys[0]||'all';return S.ry;}
