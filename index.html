@@ -197,7 +197,7 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 <div class="app">
   <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
   <header class="top">
-    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 8</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
+    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 9</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
     <button class="btn sm" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي">الوضع الليلي</button>
   </header>
   <main id="view"><div class="card empty">جارٍ تحميل بيانات الجمعية…</div></main>
@@ -232,6 +232,20 @@ function memberStatusAt(m, monthId){
   if (!m.events && m.active === false) st = 'frozen';
   return st;
 }
+// القطة: استثناء الشهر إن وُجد، وإلا القطة الافتراضية السارية من ذلك الشهر
+function defaultQAt(config, monthId){
+  var h = (config && config.qHistory) || [];
+  if (!h.length) return null;
+  var s = h.slice().sort(function(a,b){ return a.from < b.from ? -1 : 1; }), v = +s[0].amount || 0;
+  s.forEach(function(x){ if (x.from <= monthId) v = +x.amount || 0; });
+  return v;
+}
+function contributionOf(config, mo){
+  if (!mo) return 0;
+  if (mo.qOverride != null && mo.qOverride !== '') return +mo.qOverride || 0;
+  var d = defaultQAt(config, mo.id);
+  return d != null ? d : (+mo.contribution || 0);
+}
 function compute(config, months, txs){
   config = config || {};
   var members = config.members || [];
@@ -256,7 +270,7 @@ function compute(config, months, txs){
       acc = +anc.account || 0;
       Object.keys(anc.balances || {}).forEach(function(id){ bal[id] = +anc.balances[id] || 0; });
     }
-    var q = +mo.contribution || 0;
+    var q = contributionOf(config, mo);
     var list = (byMonth[mo.id] || []).slice().sort(function(a,b){ return (a.seq||0) - (b.seq||0); });
     var r = { id: mo.id, month: mo, openAcc: r2(acc), dep: 0, ext: 0, exp: 0, pay: 0, accAdj: 0, per: {}, tx: list, byCat: {}, anchorDiff: anchorDiff };
     var exempt = mo.exempt || [];
@@ -301,7 +315,7 @@ function compute(config, months, txs){
   });
   return out;
 }
-if (typeof module !== 'undefined') module.exports = { memberStatusAt: memberStatusAt, compute: compute, monthAfter: monthAfter, KINDS: KINDS };
+if (typeof module !== 'undefined') module.exports = { contributionOf: contributionOf, defaultQAt: defaultQAt, memberStatusAt: memberStatusAt, compute: compute, monthAfter: monthAfter, KINDS: KINDS };
 
 </script>
 <script>
@@ -470,7 +484,7 @@ function txRow(t){
 }
 
 function quickStatus(c){
-  var q=+(monthDoc(c.id)||{}).contribution||0;
+  var q=monthQ(c.id);
   return activeMembers(c.id).map(function(m){
     var p=c.per[m.id]||{open:0,dep:0};
     var dep=c.tx.filter(function(t){return t.kind==='deposit'&&t.member===m.id;}).reduce(function(s,t){return s+(+t.amount||0);},0);
@@ -486,7 +500,7 @@ function viewMonth(){
   if(!S.sel) return '<div class="card empty">لا يوجد شهر بعد.</div>';
   var c=calcOf(S.sel), mo=monthDoc(S.sel), locked=isLocked(S.sel);
   var chips='<div class="chips" role="group" aria-label="اختر الشهر">'+ids.map(function(id){var m=monthDoc(id);return '<button type="button" class="chip" data-sel="'+id+'" aria-pressed="'+(id===S.sel)+'">'+(m.closed?svg('lock'):'')+esc(shortMonth(id))+' '+id.slice(2,4)+'</button>';}).join('')+'</div>';
-  var q=+mo.contribution||0;
+  var q=monthQ(S.sel);
   var qs=quickStatus(c);
   var qhtml=qs.map(function(x){
     var st=x.state==='covered'?'<span class="pill acc" title="ما دفعه من جيبه عن الجمعية يغطي القطة">دفعها نيابةً عن الجمعية</span>':x.state==='partial'?'<span class="pill gold">دفع '+N(x.dep+x.onb)+' من '+N(x.q)+'</span>':x.state==='paid'?'<span class="pill pos">'+svg('check','style="width:12px;height:12px"')+' دفع '+N(x.dep)+'</span>':x.state==='exempt'?'<span class="pill zero">معفى هذا الشهر</span>':x.state==='credit'?'<span class="pill acc">تُخصم من رصيده</span>':'<span class="pill neg">لم يدفع</span>';
@@ -515,7 +529,7 @@ function viewMonth(){
   var neg=c.closeAcc<0;
   var yy=S.sel.slice(0,4),oldOpen=S.canWrite&&yearsList()[0]!==yy&&monthsOfYear(yy).some(function(id){return !(monthDoc(id)||{}).closed;});
   return yearChips(S.sel.slice(0,4),'data-ychip')+(oldOpen?'<div class="note small row" style="justify-content:space-between"><span>سنة '+yy+' فيها أشهر مفتوحة. بعد ما تكمل إدخالها، أرشفها من «التقارير».</span><button type="button" class="btn sm" data-goarch="'+yy+'">أرشفتها الآن</button></div>':'')+chips+anchorBanner(c)+
-  '<section class="card"><div class="card-h"><div><h2>'+esc(mo.label||monthLabel(S.sel))+' <span class="small muted" style="font-family:var(--font-body);font-weight:400">'+esc(hijriOf(S.sel))+'</span></h2><div class="small muted">القطة هذا الشهر '+N(q)+' ريال لكل عضو'+(mo.closed?' · <span class="lock">'+svg('lock')+' مقفل</span>':' · مفتوح')+'</div></div>'+
+  '<section class="card"><div class="card-h"><div><h2>'+esc(mo.label||monthLabel(S.sel))+' <span class="small muted" style="font-family:var(--font-body);font-weight:400">'+esc(hijriOf(S.sel))+'</span></h2><div class="small muted">القطة هذا الشهر '+N(q)+' ريال لكل عضو'+(mo.qOverride!=null?' <span class="pill gold">استثناء لهذا الشهر</span>':'')+(S.canWrite?' <button type="button" class="btn sm" id="goQ" style="padding:1px 8px;font-size:12px">تغيير</button>':'')+(mo.closed?' · <span class="lock">'+svg('lock')+' مقفل</span>':' · مفتوح')+'</div></div>'+
     '<div class="row">'+(mo.closed&&S.canWrite?(locked?'<button type="button" class="btn sm" id="unlockBtn">'+svg('unlock')+' فتح للتعديل</button>':'<span class="pill gold">مفتوح للتعديل مؤقتاً</span>'):'')+
     (S.canWrite&&S.sel===firstMonthId()?'<button type="button" class="btn sm" id="openEdit">تعديل أرصدة البداية</button>':'')+
     '<button type="button" class="btn sm" id="monthReport">صورة التقرير</button>'+
@@ -609,7 +623,7 @@ function viewTools(){
  '<div class="row">'+(canPickFolder?'<button type="button" class="btn pri" id="bkPick">'+(S.bk.folder?'غيّر مجلد النسخ':'اختر مجلد النسخ')+'</button>':'')+'<button type="button" class="btn" id="bkJson">احفظ نسخة في التنزيلات</button><button type="button" class="btn" id="xlsBtn">تصدير إلى إكسل</button></div>'+
  '<div class="small muted">التصدير إلى إكسل يحتاج إنترنت. النسخة الاحتياطية تعمل بدونه.</div>'+
  '<div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px"><h3>استرجاع من نسخة احتياطية</h3><label class="f">اختر ملف النسخة (json أو xlsx)<input type="file" id="rsFile" accept=".json,.xlsx"></label><div id="rsOut"></div></div></section>'+
-  (w?'<section class="card"><div class="card-h"><h2>القطة الشهرية</h2></div><div class="row"><label class="f" style="flex:1">مبلغ القطة في '+esc(shortMonth(S.sel||''))+'<input type="number" inputmode="decimal" id="contribIn" value="'+esc(mo.contribution||0)+'"></label><button type="button" class="btn" id="contribSave" style="align-self:end">حفظ</button></div><div class="small muted" style="margin-top:6px">يُنقل نفس المبلغ تلقائياً للشهر التالي عند الإقفال.</div></section>'+
+  (w?qCard()+
   membersCard()+prevYearsCard()+
   '<section class="card"><div class="card-h"><h2>بنود المصروفات</h2></div><div class="row">'+cats+'</div><div class="row" style="margin-top:10px"><input type="text" id="newCat" placeholder="بند جديد" style="flex:1"><button type="button" class="btn" id="addCat">إضافة</button></div></section>':'')+
   '';
@@ -639,7 +653,7 @@ function entrySheet(existing,preset){
     }).join('');
     var mems=k.needsMember?'<div><div class="small muted" style="margin-bottom:6px">العضو</div><div class="chips" style="flex-wrap:wrap">'+(S.config.members||[]).filter(function(m){var s=memberStatusAt(m,t.month);return s==='active'||s==='frozen'||m.id===t.member;}).map(function(m){return '<button type="button" class="chip" data-mem="'+esc(m.id)+'" aria-pressed="'+(t.member===m.id)+'"'+(ro?' disabled':'')+'>'+esc(m.name)+'</button>';}).join('')+'</div></div>':'';
     var cats=t.kind==='expense'?'<div><div class="small muted" style="margin-bottom:6px">البند</div><div class="chips" style="flex-wrap:wrap">'+(S.config.categories||[]).map(function(c){return '<button type="button" class="chip" data-cat="'+esc(c)+'" aria-pressed="'+(t.category===c)+'"'+(ro?' disabled':'')+'>'+esc(c)+'</button>';}).join('')+'</div></div>':'';
-    var q=+(monthDoc(t.month)||{}).contribution||1000;
+    var q=monthQ(t.month)||1000;
     var quick=[q,q*2,500,1500].filter(function(v,i,a){return a.indexOf(v)===i;}).map(function(v){return '<button type="button" class="btn sm" data-amt="'+v+'"'+(ro?' disabled':'')+'>'+fmt(v)+'</button>';}).join('');
     var fixedBox=(t.kind==='onbehalf'||t.kind==='payout'||t.kind==='expense')?'<label class="check"><input type="checkbox" id="eFixed"'+(t.fixed?' checked':'')+(ro?' disabled':'')+'> يتكرر كل شهر (ينسخ تلقائياً للشهر الجديد)</label>':'';
     var effect=effectText(t);
@@ -734,7 +748,7 @@ function closeMonthSheet(){
     go.addEventListener('click',function(){
       go.disabled=true;
       var cp=m.querySelector('#copyFixed');var copy=cp?cp.checked:false;
-      S.db.collection('months').doc(nextId).set({id:nextId,label:monthLabel(nextId),contribution:+mo.contribution||0,closed:false,notes:{}})
+      S.db.collection('months').doc(nextId).set({id:nextId,label:monthLabel(nextId),contribution:(defaultQAt(S.config,nextId)!=null?defaultQAt(S.config,nextId):monthQ(S.sel)),closed:false,notes:{}})
       .then(function(){return S.db.collection('months').doc(S.sel).update({closed:true});})
       .then(function(){
         if(!copy)return;
@@ -750,7 +764,7 @@ function closeMonthSheet(){
 
 
 function quickSheet(mid){
-  var c=calcOf(S.sel),mo=monthDoc(S.sel),m=member(mid),q=+mo.contribution||0;
+  var c=calcOf(S.sel),mo=monthDoc(S.sel),m=member(mid),q=monthQ(S.sel);
   var x=quickStatus(c).filter(function(y){return y.m.id===mid;})[0]||{state:'due',dep:0,open:0};
   var deps=c.tx.filter(function(t){return t.kind==='deposit'&&t.member===mid;});
   var ex=(mo.exempt||[]).indexOf(mid)>=0;
@@ -806,6 +820,7 @@ function bindView(){
   if(route==='tools') bindTools();
   if(route==='reports') bindSearch();
   if(route==='month') bindBank();
+  var gq=document.getElementById('goQ');if(gq)gq.addEventListener('click',function(){location.hash='#tools';setTimeout(function(){var e=document.getElementById('qOvAmt');if(e){e.scrollIntoView({block:'center'});e.focus();}},200);});
   var oe=document.getElementById('openEdit');if(oe)oe.addEventListener('click',openingSheet);
   bindYears();bindAnchors();
   document.querySelectorAll('[data-goarch]').forEach(function(b){b.addEventListener('click',function(){S.ry=b.getAttribute('data-goarch');location.hash='#reports';setTimeout(function(){var a=document.getElementById('yearArchive');if(a)a.click();},150);});});
@@ -843,10 +858,7 @@ function bindTools(){
     var p=Promise.resolve();docs.forEach(function(d){d.createdAt=new Date().toISOString();d.by=S.uid||'';p=p.then(function(){return S.db.collection('tx').doc().set(d);});});
     p.then(function(){toast('تم التسجيل في '+shortMonth(S.sel));ss.disabled=false;amt.value='';spl();}).catch(function(e){ss.disabled=false;toast(errMsg(e));});
   });
-  var cs=document.getElementById('contribSave');if(cs)cs.addEventListener('click',function(){
-    var v=+document.getElementById('contribIn').value;if(!(v>=0)){toast('مبلغ غير صحيح');return;}
-    S.db.collection('months').doc(S.sel).update({contribution:v}).then(function(){toast('تم الحفظ');}).catch(function(e){toast(errMsg(e));});
-  });
+  bindQCard();
   bindMembersCard();
   bindPrevYears();
   var ac=document.getElementById('addCat');if(ac)ac.addEventListener('click',function(){
@@ -878,7 +890,7 @@ function buildWorkbook(X){
   var ws=X.utils.aoa_to_sheet(sum);ws['!cols']=[{wch:24},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}];X.utils.book_append_sheet(wb,ws,'الملخص');
   expRows().slice().reverse().forEach(function(c){
     var mo=monthDoc(c.id)||{};var notes=mo.notes||{};
-    var a=[[mo.label||monthLabel(c.id)],['القطة',+mo.contribution||0],[],['العضو','الرصيد السابق','القطة','حوّل للحساب','دفع نيابة','استلم من الحساب','تسوية','الرصيد الجديد','الصفة','ملاحظة']];
+    var a=[[mo.label||monthLabel(c.id)],['القطة',monthQ(c.id)],[],['العضو','الرصيد السابق','القطة','حوّل للحساب','دفع نيابة','استلم من الحساب','تسوية','الرصيد الجديد','الصفة','ملاحظة']];
     (S.config.members||[]).forEach(function(m){var p=c.per[m.id];if(!p)return;a.push([m.name,p.open,p.contrib,p.dep,p.onb,p.pay,p.adj,p.close,p.close>0?'دائن':p.close<0?'مدين':'—',notes[m.id]||'']);});
     a.push([],['حساب الجمعية'],['باقي الشهر الماضي',c.openAcc],['دخل من الأعضاء',c.dep],['دخل خارجي',c.ext],['مصروفات الحساب',c.exp],['محوّل للأعضاء',c.pay],['الباقي في الحساب',c.closeAcc],['المفترض (الصافي)',c.net],[],['الحركات'],['النوع','العضو / البند','المبلغ','ملاحظة']);
     c.tx.forEach(function(t){a.push([KTXT[t.kind]?KTXT[t.kind].short:t.kind,t.member?member(t.member).name:(t.category||''),t.amount,t.note||'']);});
@@ -1049,7 +1061,7 @@ function bindSearch(){
 
 // ===== صورة تقرير الشهر =====
 function reportCanvas(id,showBal){
-  var c=calcOf(id),mo=monthDoc(id),q=+mo.contribution||0;
+  var c=calcOf(id),mo=monthDoc(id),q=monthQ(id);
   var css=getComputedStyle(document.documentElement);
   var W=1080,cv=document.createElement('canvas'),x=cv.getContext('2d');
   var qs=quickStatus(c);
@@ -1133,11 +1145,11 @@ function saveMember(mid,patch){
 }
 function gapCharge(m,uptoId){
   var sum=0,months=[];
-  S.calc.forEach(function(c){if(c.id>=uptoId)return;var s=statusAt(m,c.id);if(s==='frozen'||s==='ended'){sum+=+(monthDoc(c.id)||{}).contribution||0;months.push(c.id);}});
+  S.calc.forEach(function(c){if(c.id>=uptoId)return;var s=statusAt(m,c.id);if(s==='frozen'||s==='ended'){sum+=monthQ(c.id);months.push(c.id);}});
   // فقط الفترة الأخيرة المتصلة من التوقف
   var cont=[];for(var i=months.length-1;i>=0;i--){if(i===months.length-1||months[i]===prevMonth(months[i+1]))cont.unshift(months[i]);else break;}
   if(cont.length&&cont[cont.length-1]!==prevMonth(uptoId))cont=[];
-  sum=cont.reduce(function(s,id){return s+(+(monthDoc(id)||{}).contribution||0);},0);
+  sum=cont.reduce(function(s,id){return s+monthQ(id);},0);
   return {sum:sum,months:cont};
 }
 function prevMonth(id){var y=+id.slice(0,4),m=+id.slice(5,7)-1;if(m<1){m=12;y--;}return y+'-'+(m<10?'0':'')+m;}
@@ -1356,7 +1368,7 @@ function buildImport(parsed){
     });
     add({kind:'external',amount:p.ext.amt,note:p.ext.note});
     p.exps.forEach(function(e){add({kind:'expense',amount:e.amt,category:guessCat(e.label),note:(e.label+(e.note?' — '+e.note:'')).trim()});});
-    mdocs.push({id:p.id,label:monthLabel(p.id),contribution:p.q,closed:true,notes:notes});
+    var md={id:p.id,label:monthLabel(p.id),contribution:p.q,closed:true,notes:notes};var dq=defaultQAt(S.config,p.id);if(dq!=null&&dq!==p.q)md.qOverride=p.q;mdocs.push(md);
   });
   var first=months[0],bal={};first.members.forEach(function(x){bal[idOf[normName(x.name)]]=r2(x.open);});
   // الأعضاء الحاليون غير الموجودين في الملف: انضموا مع أول شهر حالي
@@ -1407,12 +1419,55 @@ function bindPrevYears(){
     var oldOpen=S.config.opening||{account:0,balances:{}};
     var anchors=anchorsList();if(!anchors.some(function(a){return a.month===f;}))anchors.push({month:f,account:+oldOpen.account||0,balances:Object.assign({},oldOpen.balances||{})});
     var ids=[],id=start;while(id<f){ids.push(id);id=monthAfter(id);}
-    var q=+(monthDoc(f)||{}).contribution||1000;
+    var q=monthQ(f)||1000;
     pg.disabled=true;var p=Promise.resolve();
     ids.forEach(function(m){p=p.then(function(){return S.db.collection('months').doc(m).set({id:m,label:monthLabel(m),contribution:q,closed:false,notes:{}});});});
     p.then(function(){return S.db.doc('config/main').update({opening:{account:r2(+document.getElementById('pmAcc').value||0),balances:bal},anchors:anchors,firstMonth:start});})
     .then(function(){S.sel=start;toast('أُنشئت '+ids.length+' شهر سابق');location.hash='#month';});
   });
+}
+
+
+// ===== القطة الافتراضية واستثناء الشهر =====
+function monthQ(id){return contributionOf(S.config,monthDoc(id)||{id:id});}
+function qHistory(){return ((S.config&&S.config.qHistory)||[]).slice().sort(function(a,b){return a.from<b.from?-1:1;});}
+function ensureQHistory(){
+  // أول مرة: نحوّل القطة المخزّنة في كل شهر إلى «افتراضية + استثناءات» دون تغيير أي رقم
+  if(S.config.qHistory&&S.config.qHistory.length)return Promise.resolve();
+  var ids=S.months.map(function(m){return m.id;}).sort();if(!ids.length)return Promise.resolve();
+  var base=+(monthDoc(ids[0])||{}).contribution||1000;var h=[{from:ids[0],amount:base}];
+  var p=S.db.doc('config/main').update({qHistory:h});
+  ids.forEach(function(id){var mo=monthDoc(id);if(mo.qOverride==null&&(+mo.contribution||0)!==base)p=p.then(function(){return S.db.collection('months').doc(id).update({qOverride:+mo.contribution||0});});});
+  return p;
+}
+function qCard(){
+  var sel=S.sel,mo=monthDoc(sel)||{},h=qHistory(),def=defaultQAt(S.config,sel);
+  if(def==null)def=+mo.contribution||0;
+  var hist=h.length?h.map(function(x,i){return '<div class="row" style="justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)"><span>من '+esc(monthLabel(x.from))+': <b class="num">'+fmt(x.amount)+'</b></span>'+(i>0?'<button type="button" class="btn sm danger" data-qdel="'+esc(x.from)+'">حذف</button>':'')+'</div>';}).join(''):'<div class="small muted">القطة الافتراضية الآن '+N(def)+' لكل الأشهر.</div>';
+  var opts='',end=sel;for(var k=0;k<12;k++)end=monthAfter(end);var id=firstMonthId()||sel;for(var i=0;i<240&&id<=end;i++){opts+='<option value="'+id+'"'+(id===sel?' selected':'')+'>'+esc(monthLabel(id))+'</option>';id=monthAfter(id);}
+  var ov=mo.qOverride!=null;
+  return '<section class="card" style="display:grid;gap:12px"><div><h2>القطة</h2><div class="small muted">القطة الافتراضية تُطبَّق من الشهر الذي تختاره وما بعده. وتقدر تضع لأي شهر قطة خاصة به فقط.</div></div>'+
+   '<div style="display:grid;gap:6px"><h3>القطة الافتراضية</h3>'+hist+
+   '<div class="row" style="align-items:end"><label class="f" style="flex:1;min-width:120px">المبلغ الجديد<input type="number" inputmode="decimal" id="qDefAmt" placeholder="'+fmt(def)+'"></label><label class="f" style="flex:2;min-width:180px">يبدأ من<select id="qDefFrom">'+opts+'</select></label><button type="button" class="btn pri" id="qDefSave">حفظ</button></div></div>'+
+   '<div style="display:grid;gap:6px;border-top:1px solid var(--line);padding-top:12px"><h3>قطة '+esc(monthLabel(sel))+' فقط</h3>'+
+   '<div class="small">'+(ov?'هذا الشهر له قطة خاصة: <b class="num">'+fmt(mo.qOverride)+'</b> (الافتراضية '+fmt(def)+')':'يتبع القطة الافتراضية: <b class="num">'+fmt(def)+'</b>')+'</div>'+
+   '<div class="row"><input type="number" inputmode="decimal" id="qOvAmt" placeholder="مبلغ قطة هذا الشهر" style="flex:1"><button type="button" class="btn" id="qOvSave">ضعها لهذا الشهر فقط</button>'+(ov?'<button type="button" class="btn gold" id="qOvClear">رجوع للافتراضية</button>':'')+'</div>'+
+   (isLocked(sel)?'<div class="small muted">الشهر مقفل؛ التعديل يغيّر أرقامه وما بعده.</div>':'')+'</div></section>';
+}
+function bindQCard(){
+  var ds=document.getElementById('qDefSave');
+  if(ds)ds.addEventListener('click',function(){
+    var v=+document.getElementById('qDefAmt').value,from=document.getElementById('qDefFrom').value;if(!(v>=0)||document.getElementById('qDefAmt').value===''){toast('اكتب المبلغ');return;}
+    ds.disabled=true;
+    ensureQHistory().then(function(){var h=qHistory().filter(function(x){return x.from!==from;});h.push({from:from,amount:r2(v)});return S.db.doc('config/main').update({qHistory:h});})
+    .then(function(){toast('القطة الافتراضية '+fmt(v)+' من '+monthLabel(from));});
+  });
+  document.querySelectorAll('[data-qdel]').forEach(function(b){b.addEventListener('click',function(){var f=b.getAttribute('data-qdel');S.db.doc('config/main').update({qHistory:qHistory().filter(function(x){return x.from!==f;})});});});
+  var os=document.getElementById('qOvSave');
+  if(os)os.addEventListener('click',function(){var raw=document.getElementById('qOvAmt').value;if(raw===''){toast('اكتب المبلغ');return;}var v=r2(+raw);
+    ensureQHistory().then(function(){return S.db.collection('months').doc(S.sel).update({qOverride:v});}).then(function(){toast('قطة '+shortMonth(S.sel)+' فقط: '+fmt(v));});});
+  var oc=document.getElementById('qOvClear');
+  if(oc)oc.addEventListener('click',function(){ensureQHistory().then(function(){return S.db.collection('months').doc(S.sel).update({qOverride:null});}).then(function(){toast('رجع '+shortMonth(S.sel)+' للقطة الافتراضية');});});
 }
 
 // ===== الوضع الليلي =====
@@ -1847,6 +1902,7 @@ function logDescribe(id,prev,next){
     if(prev.closed&&!next.closed)return 'فتح شهر '+mon(mid);
     if(JSON.stringify(prev.exempt||[])!==JSON.stringify(next.exempt||[])){var a=(next.exempt||[]).filter(function(x){return (prev.exempt||[]).indexOf(x)<0;}),r=(prev.exempt||[]).filter(function(x){return (next.exempt||[]).indexOf(x)<0;});return (a.length?'إعفاء '+a.map(function(x){return member(x).name;}).join('، '):'إلغاء إعفاء '+r.map(function(x){return member(x).name;}).join('، '))+' من قطة '+mon(mid);}
     if(prev.bank!==next.bank)return 'مطابقة البنك في '+mon(mid)+': '+(next.bank==null?'مسح':fmt(next.bank));
+    if((prev.qOverride==null?null:+prev.qOverride)!==(next.qOverride==null?null:+next.qOverride))return next.qOverride==null?'رجوع '+mon(mid)+' للقطة الافتراضية':'قطة خاصة لشهر '+mon(mid)+': '+fmt(next.qOverride);
     if(+prev.contribution!==+next.contribution)return 'تغيير القطة في '+mon(mid)+' إلى '+fmt(next.contribution);
     return 'تعديل شهر '+mon(mid);
   }
@@ -1860,6 +1916,7 @@ function logDescribe(id,prev,next){
     if(JSON.stringify(prev.opening)!==JSON.stringify(next.opening)&&prev.firstMonth===next.firstMonth&&JSON.stringify(prev.anchors||[])===JSON.stringify(next.anchors||[]))return 'تعديل أرصدة البداية في '+mon(next.firstMonth||firstMonthId());
     if(JSON.stringify(prev.anchors||[])!==JSON.stringify(next.anchors||[])&&JSON.stringify(prev.opening)===JSON.stringify(next.opening))return 'معالجة فرق الترحيل بين السنوات';
     if(JSON.stringify(prev.opening)!==JSON.stringify(next.opening))return 'إضافة أشهر سابقة (من '+mon(next.firstMonth)+' '+String(next.firstMonth||'').slice(0,4)+')';
+    if(JSON.stringify(prev.qHistory||[])!==JSON.stringify(next.qHistory||[])){var nh=(next.qHistory||[]).filter(function(x){return !(prev.qHistory||[]).some(function(y){return y.from===x.from&&+y.amount===+x.amount;});})[0];return nh?'القطة الافتراضية '+fmt(nh.amount)+' من '+mon(nh.from)+' '+nh.from.slice(0,4):'تعديل القطة الافتراضية';}
     if(JSON.stringify(prev.plans||{})!==JSON.stringify(next.plans||{}))return 'تعديل خطة سداد';
     if(JSON.stringify(prev.categories)!==JSON.stringify(next.categories))return 'تعديل بنود المصروفات';
     return 'تعديل الإعدادات';
