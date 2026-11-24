@@ -197,7 +197,7 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 <div class="app">
   <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
   <header class="top">
-    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 12</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
+    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 13</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
     <button class="btn sm" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي">الوضع الليلي</button>
   </header>
   <main id="view"><div class="card empty">جارٍ تحميل بيانات الجمعية…</div></main>
@@ -483,8 +483,13 @@ function txRow(t){
   return '<button type="button" class="tx k-'+esc(t.kind)+'" data-tx="'+esc(t.id)+'"><span class="ic">'+svg(t.kind)+'</span><span><span class="t1">'+txTitle(t)+'</span><br><span class="t2">'+(sub.join(' · ')||'&nbsp;')+'</span></span><span class="amt '+sign+'"><span class="num">'+pre+fmt(t.amount)+'</span></span></button>';
 }
 
+function qPaidText(x){var t=r2(x.dep+x.onb),d=r2(t-x.q);return 'دفع '+fmt(t)+(d>0.005?' · زيادة '+fmt(d):d<-0.005?' · ناقص '+fmt(-d):'');}
 function qPill(x){
-  return x.state==='covered'?'<span class="pill acc" title="ما دفعه من جيبه عن الجمعية يغطي القطة">دفعها نيابةً عن الجمعية</span>':x.state==='partial'?'<span class="pill gold">دفع '+N(x.dep+x.onb)+' من '+N(x.q)+'</span>':x.state==='paid'?'<span class="pill pos">'+svg('check','style="width:12px;height:12px"')+' دفع '+N(x.dep)+'</span>':x.state==='exempt'?'<span class="pill zero">معفى هذا الشهر</span>':x.state==='credit'?'<span class="pill acc">تُخصم من رصيده</span>':'<span class="pill neg">لم يدفع</span>';
+  if(x.state==='paid'||x.state==='covered'||x.state==='partial'){
+    var tip=(x.dep?'حوّل للحساب '+fmt(x.dep):'')+(x.dep&&x.onb?' و':'')+(x.onb?'دفع نيابة '+fmt(x.onb):'');
+    return '<span class="pill '+(x.state==='partial'?'gold':'pos')+'" title="'+esc(tip)+'">'+(x.state!=='partial'?svg('check','style="width:12px;height:12px"')+' ':'')+qPaidText(x)+'</span>';
+  }
+  return x.state==='exempt'?'<span class="pill zero">معفى هذا الشهر</span>':x.state==='credit'?'<span class="pill acc">تُخصم من رصيده</span>':'<span class="pill neg">لم يدفع</span>';
 }
 function quickStatus(c){
   var q=monthQ(c.id);
@@ -511,7 +516,7 @@ function viewMonth(){
     var p=c.per[m.id];if(!p)return '';
     var x=qsm[m.id];
     var qline=x?'<div class="row" style="gap:6px"><span class="small muted">القطة:</span>'+qPill(x)+'</div>':'';
-    var acts=canAct?'<div class="row" style="gap:8px;margin-top:2px">'+(x&&x.state!=='paid'&&x.state!=='exempt'&&q>0?'<button type="button" class="btn sm pri" data-qpay="'+esc(m.id)+'">دفع قطة الشهر '+N(q)+'</button>':'')+'<button type="button" class="btn sm" data-qedit="'+esc(m.id)+'">تعديل</button></div>':'';
+    var acts=canAct?'<div class="row" style="margin-top:2px"><button type="button" class="btn sm pri" data-qedit="'+esc(m.id)+'">حركات العضو</button></div>':'';
     var parts=['<b>'+SN(p.open)+'</b> البداية'];
     if(p.contrib) parts.push('− <b>'+N(p.contrib)+'</b> القطة');
     if(p.dep) parts.push('+ <b>'+N(p.dep)+'</b> حوّل');
@@ -781,7 +786,7 @@ function quickSheet(mid,openForm){
   var sec=function(title,list,sum,empty){return '<div><div class="sec-t"><span>'+title+'</span>'+(list.length?'<span>'+N(sum)+'</span>':'')+'</div>'+(list.length?'<div class="txl">'+list.map(line).join('')+'</div>':'<div class="small muted" style="padding:2px 4px 6px">'+empty+'</div>')+'</div>';};
   var sum=function(l){return l.reduce(function(s,t){return s+(+t.amount||0);},0);};
   var deps=by('deposit'),onbs=by('onbehalf'),pays=by('payout'),adjs=by('adjust');
-  var qText=ex?'معفى من قطة هذا الشهر':x.state==='paid'?'دفع القطة':x.state==='covered'?'القطة مغطاة بما دفعه نيابة':x.state==='partial'?'دفع '+fmt(x.dep+x.onb)+' من '+fmt(q):x.state==='credit'?'لم يحوّل، تُخصم القطة من رصيده':'لم يدفع القطة بعد';
+  var qText=ex?'معفى من قطة هذا الشهر':(x.state==='paid'||x.state==='covered'||x.state==='partial')?qPaidText(x):x.state==='credit'?'لم يحوّل، تُخصم القطة من رصيده':'لم يدفع القطة بعد';
   var btn=function(id,label,cls){return '<button type="button" class="btn '+(cls||'')+'" id="'+id+'"'+(locked?' disabled':'')+' style="min-height:48px">'+label+'</button>';};
   var html='<div class="sheet-h"><div class="brand">'+av(m)+'<div><h2>'+esc(m.name)+' · '+esc(shortMonth(S.sel))+'</h2><div class="small muted">رصيده: '+balPill(p.open)+' ← بعد الشهر: '+balPill(p.close)+'</div></div></div><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
     (isLocked(S.sel)?'<div class="note small">الشهر مقفل. افتحه للتعديل من صفحة الشهر.</div>':'')+
@@ -1137,8 +1142,8 @@ function reportCanvas(id,showBal){
     x.fillStyle='#fff';rr(x,bx,by,cw,70,16);x.fill();
     var mc=mColor(s.m.id);x.fillStyle=mc;rr(x,bx+cw-10,by+14,6,42,3);x.fill();
     x.fillStyle='#15242A';x.font='500 30px '+F;x.textAlign='right';x.fillText(s.m.name,bx+cw-30,by+46);
-    var lab=s.state==='covered'?'مغطاة نيابة':s.state==='partial'?'دفع '+fmt(s.dep+s.onb)+' من '+fmt(s.q):s.state==='paid'?'✓ دفع '+fmt(s.dep):s.state==='exempt'?'معفى':s.state==='credit'?'من رصيده':'لم يدفع';
-    x.fillStyle=s.state==='paid'?'#1D7A47':s.state==='due'?'#B23A30':s.state==='partial'?'#B5832A':'#5D6B6F';x.font='500 26px '+F;x.textAlign='left';x.fillText(lab,bx+24,by+45);
+    var lab=(s.state==='paid'||s.state==='covered'||s.state==='partial')?qPaidText(s):s.state==='exempt'?'معفى':s.state==='credit'?'من رصيده':'لم يدفع';
+    x.fillStyle=(s.state==='paid'||s.state==='covered')?'#1D7A47':s.state==='due'?'#B23A30':s.state==='partial'?'#B5832A':'#5D6B6F';x.font='500 26px '+F;x.textAlign='left';x.fillText(lab,bx+24,by+45);
   });
   y+=Math.ceil(qs.length/2)*86+60;
   if(cats.length){head('أهم المصروفات');y+=10;var mx=cats[0][1];
