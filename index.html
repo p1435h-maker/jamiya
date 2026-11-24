@@ -197,12 +197,12 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 <div class="app">
   <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
   <header class="top">
-    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 9</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
+    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 11</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
     <button class="btn sm" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي">الوضع الليلي</button>
   </header>
   <main id="view"><div class="card empty">جارٍ تحميل بيانات الجمعية…</div></main>
 </div>
-<button class="btn pri fab" id="fab" type="button" hidden>+ حركة جديدة</button>
+<button class="btn pri fab" id="fab" type="button" hidden>+ مصروف أو دخل للجمعية</button>
 <div id="modal"></div>
 
 <script>
@@ -642,13 +642,14 @@ function closeSheet(){document.getElementById('modal').innerHTML='';}
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSheet();});
 function toast(t){var d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(function(){d.remove();},2600);}
 
-function entrySheet(existing,preset){
-  var t=existing?Object.assign({},existing):Object.assign({kind:'deposit',amount:'',note:'',month:S.sel},preset||{});
+function entrySheet(existing,preset,onDone){
+  var done=function(){if(onDone)onDone();else closeSheet();};
+  var t=existing?Object.assign({},existing):Object.assign({kind:null,amount:'',note:'',month:S.sel},preset||{});
   var locked=isLocked(t.month);
   var ro=locked||!S.canWrite;
   function draw(){
-    var k=KINDS[t.kind];
-    var kinds=['deposit','expense','payout','onbehalf','external'].concat(t.kind==='adjust'?['adjust']:[]).concat(t.kind==='accadj'?['accadj']:[]).map(function(kk){
+    var k=KINDS[t.kind]||{};
+    var kinds=((existing||preset)?['deposit','expense','payout','onbehalf','external']:['expense','external']).concat(t.kind==='adjust'?['adjust']:[]).concat(t.kind==='accadj'?['accadj']:[]).map(function(kk){
       return '<button type="button" class="kind k-'+kk+'" data-kind="'+kk+'" aria-pressed="'+(t.kind===kk)+'"'+(ro?' disabled':'')+'><span class="ic">'+svg(kk)+'</span><b>'+KTXT[kk].t+'</b><span>'+KTXT[kk].s+'</span></button>';
     }).join('');
     var mems=k.needsMember?'<div><div class="small muted" style="margin-bottom:6px">العضو</div><div class="chips" style="flex-wrap:wrap">'+(S.config.members||[]).filter(function(m){var s=memberStatusAt(m,t.month);return s==='active'||s==='frozen'||m.id===t.member;}).map(function(m){return '<button type="button" class="chip" data-mem="'+esc(m.id)+'" aria-pressed="'+(t.member===m.id)+'"'+(ro?' disabled':'')+'>'+esc(m.name)+'</button>';}).join('')+'</div></div>':'';
@@ -658,14 +659,15 @@ function entrySheet(existing,preset){
     var fixedBox=(t.kind==='onbehalf'||t.kind==='payout'||t.kind==='expense')?'<label class="check"><input type="checkbox" id="eFixed"'+(t.fixed?' checked':'')+(ro?' disabled':'')+'> يتكرر كل شهر (ينسخ تلقائياً للشهر الجديد)</label>':'';
     var effect=effectText(t);
     var by=existing&&existing.by&&S.names[existing.by]?'<div class="small muted">أضافها: '+esc(S.names[existing.by])+'</div>':'';
-    return '<div class="sheet-h"><h2>'+(existing?'تفاصيل الحركة':'حركة جديدة')+' · '+esc(shortMonth(t.month))+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
+    return '<div class="sheet-h"><h2>'+(existing?'تفاصيل الحركة':'حساب الجمعية')+' · '+esc(shortMonth(t.month))+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
       (locked?'<div class="note">هذا الشهر مقفل. افتحه للتعديل من صفحة الشهر.</div>':'')+
-      '<div class="kinds">'+kinds+'</div>'+mems+
+      (!existing&&!preset?'<div class="small muted">حركات الأعضاء (القطة، النيابة، التحويل لهم) تُسجَّل من بطاقة العضو في قسم «القطة».</div>':'')+
+      (!t.kind?'<div class="note small">اختر نوع الحركة أولاً.</div><div class="kinds">'+kinds+'</div>':'<div class="kinds">'+kinds+'</div>'+mems+
       '<label class="f">المبلغ (ريال)<input type="number" inputmode="decimal" id="eAmt" class="amount" value="'+esc((t.kind==='adjust'||t.kind==='accadj')?t.amount:(t.amount===''?'':Math.abs(t.amount)))+'" placeholder="0"'+(ro?' disabled':'')+'></label><div class="row">'+quick+'</div>'+
       cats+'<label class="f">ملاحظة<input type="text" id="eNote" value="'+esc(t.note||'')+'" placeholder="مثال: تسديد دين، كهرباء البيت القديم"'+(ro?' disabled':'')+'></label>'+fixedBox+
       '<div class="note good small" id="eEffect">'+effect+'</div>'+by+
       '<div id="eErr"></div>'+
-      (ro?'':'<div class="row"><button type="button" class="btn pri" id="eSave" style="flex:1">'+(existing?'حفظ التعديل':'حفظ')+'</button>'+(existing?'<button type="button" class="btn danger" id="eDel">حذف</button>':'')+'</div>');
+      (ro?'':'<div class="row"><button type="button" class="btn pri" id="eSave" style="flex:1">'+(existing?'حفظ التعديل':'حفظ')+'</button>'+(existing?'<button type="button" class="btn danger" id="eDel">حذف</button>':'')+'</div>'));
   }
   function bind(m){
     m.querySelectorAll('[data-kind]').forEach(function(b){b.addEventListener('click',function(){grab();t.kind=b.getAttribute('data-kind');if(!KINDS[t.kind].needsMember)delete t.member;redraw();});});
@@ -675,7 +677,7 @@ function entrySheet(existing,preset){
     var a=m.querySelector('#eAmt');if(a)a.addEventListener('input',function(){grab();m.querySelector('#eEffect').innerHTML=effectText(t);});
     var s=m.querySelector('#eSave');if(s)s.addEventListener('click',save);
     var d=m.querySelector('#eDel');if(d)d.addEventListener('click',function(){
-      if(d.getAttribute('data-sure')){d.disabled=true;S.db.collection('tx').doc(existing.id).delete().then(function(){closeSheet();toast('تم حذف الحركة');}).catch(err);}
+      if(d.getAttribute('data-sure')){d.disabled=true;S.db.collection('tx').doc(existing.id).delete().then(function(){done();toast('تم حذف الحركة');}).catch(err);}
       else{d.setAttribute('data-sure','1');d.textContent='اضغط مرة أخرى للتأكيد';}
     });
   }
@@ -692,6 +694,7 @@ function entrySheet(existing,preset){
     var e=[];
     var amt=+t.amount;
     if(!amt||(t.kind!=='adjust'&&t.kind!=='accadj'&&amt<=0)) e.push('اكتب المبلغ');
+    if(!t.kind){document.getElementById('eErr').innerHTML='<div class="note bad">اختر نوع الحركة</div>';return;}
     if(KINDS[t.kind].needsMember&&!t.member) e.push('اختر العضو');
     if(t.kind==='expense'&&!t.category) e.push('اختر البند');
     if(e.length){document.getElementById('eErr').innerHTML='<div class="note bad">'+e.join(' · ')+'</div>';return;}
@@ -702,7 +705,7 @@ function entrySheet(existing,preset){
     doc.by=existing&&existing.by?existing.by:(S.uid||'');
     document.getElementById('eSave').disabled=true;
     var ref=existing?S.db.collection('tx').doc(existing.id):S.db.collection('tx').doc();
-    ref.set(doc).then(function(){closeSheet();toast(existing?'تم حفظ التعديل':'تمت الإضافة');}).catch(err);
+    ref.set(doc).then(function(){done();toast(existing?'تم حفظ التعديل':'تمت الإضافة');}).catch(err);
   }
   openSheet(draw(),bind);
 }
@@ -763,27 +766,63 @@ function closeMonthSheet(){
 }
 
 
-function quickSheet(mid){
+function quickSheet(mid,openForm){
   var c=calcOf(S.sel),mo=monthDoc(S.sel),m=member(mid),q=monthQ(S.sel);
-  var x=quickStatus(c).filter(function(y){return y.m.id===mid;})[0]||{state:'due',dep:0,open:0};
-  var deps=c.tx.filter(function(t){return t.kind==='deposit'&&t.member===mid;});
+  var locked=isLocked(S.sel)||!S.canWrite;
+  var x=quickStatus(c).filter(function(y){return y.m.id===mid;})[0]||{state:'due',dep:0,onb:0,open:0,q:q};
   var ex=(mo.exempt||[]).indexOf(mid)>=0;
-  var p=c.per[mid]||{open:0,close:0};
-  var html='<div class="sheet-h"><h2>قطة '+esc(m.name)+' · '+esc(shortMonth(S.sel))+'</h2><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
-    '<div class="small muted">رصيده في بداية الشهر: '+balPill(p.open)+' · بعد هذا الشهر: '+balPill(p.close)+'</div>'+
-    (deps.length?'<div><div class="small muted" style="margin-bottom:4px">ما حوّله هذا الشهر (اضغط للتعديل أو الحذف):</div><div class="txl">'+deps.map(txRow).join('')+'</div></div>':'<div class="note small">لم يُسجَّل له تحويل هذا الشهر.'+(x.state==='credit'?' القطة تُخصم من رصيده تلقائياً.':'')+'</div>')+
-    (ex?'':'<button type="button" class="btn pri" id="qPay">سجّل أنه حوّل القطة '+N(q)+'</button>')+
-    '<button type="button" class="btn" id="qOther">سجّل مبلغاً آخر منه</button>'+
-    '<button type="button" class="btn'+(ex?' gold':'')+'" id="qEx">'+(ex?'إلغاء الإعفاء: تُحسب عليه القطة هذا الشهر':'إعفاء من قطة هذا الشهر')+'</button>'+
-    '<div id="qErr"></div>';
+  var p=c.per[mid]||{open:0,close:0,contrib:0};
+  var mine=c.tx.filter(function(t){return t.member===mid;});
+  var by=function(k){return mine.filter(function(t){return t.kind===k;});};
+  var line=function(t){return '<button type="button" class="tx k-'+esc(t.kind)+'" data-qtx="'+esc(t.id)+'"'+(locked?' disabled':'')+' style="padding:8px 4px"><span class="ic">'+svg(t.kind)+'</span><span><span class="t1">'+esc(t.note||(t.kind==='deposit'?'تحويل للحساب':t.kind==='onbehalf'?'بدون بيان':t.kind==='payout'?'تحويل له':'تسوية'))+'</span>'+(t.fixed?'<br><span class="t2">يتكرر شهرياً</span>':'')+'</span><span class="amt"><span class="num">'+(t.kind==='adjust'&&t.amount<0?'−':'')+fmt(t.amount)+'</span></span></button>';};
+  var sec=function(title,list,sum,empty){return '<div><div class="sec-t"><span>'+title+'</span>'+(list.length?'<span>'+N(sum)+'</span>':'')+'</div>'+(list.length?'<div class="txl">'+list.map(line).join('')+'</div>':'<div class="small muted" style="padding:2px 4px 6px">'+empty+'</div>')+'</div>';};
+  var sum=function(l){return l.reduce(function(s,t){return s+(+t.amount||0);},0);};
+  var deps=by('deposit'),onbs=by('onbehalf'),pays=by('payout'),adjs=by('adjust');
+  var qText=ex?'معفى من قطة هذا الشهر':x.state==='paid'?'دفع القطة':x.state==='covered'?'القطة مغطاة بما دفعه نيابة':x.state==='partial'?'دفع '+fmt(x.dep+x.onb)+' من '+fmt(q):x.state==='credit'?'لم يحوّل، تُخصم القطة من رصيده':'لم يدفع القطة بعد';
+  var btn=function(id,label,cls){return '<button type="button" class="btn '+(cls||'')+'" id="'+id+'"'+(locked?' disabled':'')+' style="min-height:48px">'+label+'</button>';};
+  var html='<div class="sheet-h"><div class="brand">'+av(m)+'<div><h2>'+esc(m.name)+' · '+esc(shortMonth(S.sel))+'</h2><div class="small muted">رصيده: '+balPill(p.open)+' ← بعد الشهر: '+balPill(p.close)+'</div></div></div><button type="button" class="x" data-close aria-label="إغلاق">×</button></div>'+
+    (isLocked(S.sel)?'<div class="note small">الشهر مقفل. افتحه للتعديل من صفحة الشهر.</div>':'')+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      (ex?'<span></span>':btn('qPay','دفع القطة '+fmt(q),'pri'))+btn('qDep','حوّل للجمعية مبلغاً آخر')+
+      btn('qOnb','دفع نيابة عن الجمعية')+btn('qPout','حوّلت له الجمعية')+
+    '</div><div id="qForm"></div>'+
+    '<div style="border-top:1px solid var(--line);padding-top:6px"><h3 style="margin:6px 0 2px">ما سُجّل له هذا الشهر</h3>'+
+      '<div class="small" style="padding:6px 4px"><b>القطة ('+fmt(q)+'):</b> '+esc(qText)+'</div>'+
+      sec('حوّله للحساب',deps,sum(deps),'لا شيء')+
+      sec('دفعه نيابة عن الجمعية',onbs,sum(onbs),'لا شيء')+
+      sec('حوّلته له الجمعية',pays,sum(pays),'لا شيء')+
+      (adjs.length?sec('تسويات',adjs,sum(adjs),''):'')+
+    '</div>'+
+    (locked?'':'<button type="button" class="btn'+(ex?' gold':'')+'" id="qEx">'+(ex?'إلغاء الإعفاء: تُحسب عليه القطة هذا الشهر':'إعفاء من قطة هذا الشهر')+'</button>');
   openSheet(html,function(el){
-    el.querySelectorAll('[data-tx]').forEach(function(b){b.addEventListener('click',function(){var t=S.tx.filter(function(y){return y.id===b.getAttribute('data-tx');})[0];if(t)entrySheet(t);});});
+    el.querySelectorAll('[data-qtx]').forEach(function(b){b.addEventListener('click',function(){var t=S.tx.filter(function(y){return y.id===b.getAttribute('data-qtx');})[0];if(t)entrySheet(t,null,function(){quickSheet(mid);});});});
     var pay=el.querySelector('#qPay');if(pay)pay.addEventListener('click',function(){pay.disabled=true;
-      S.db.collection('tx').doc().set({month:S.sel,kind:'deposit',member:mid,amount:q,note:'القطة',seq:Date.now(),createdAt:new Date().toISOString(),by:S.uid||''}).then(function(){closeSheet();toast('سُجّلت قطة '+m.name);}).catch(function(e){pay.disabled=false;toast(errMsg(e));});});
-    el.querySelector('#qOther').addEventListener('click',function(){entrySheet(null,{kind:'deposit',member:mid,month:S.sel});});
-    el.querySelector('#qEx').addEventListener('click',function(){
+      S.db.collection('tx').doc().set({month:S.sel,kind:'deposit',member:mid,amount:q,note:'القطة',seq:Date.now(),createdAt:new Date().toISOString(),by:S.uid||''}).then(function(){quickSheet(mid);}).catch(function(e){pay.disabled=false;toast(errMsg(e));});});
+    var forms={qDep:['deposit','حوّل للجمعية','مثال: تسديد دين، جزء من القطة'],qOnb:['onbehalf','دفع نيابة عن الجمعية','البيان: راتب العامل، فاتورة…'],qPout:['payout','حوّلت له الجمعية','السبب: سلفة، تسديد له']};
+    function showForm(key){
+      var f=forms[key],box=el.querySelector('#qForm');
+      box.innerHTML='<div style="border:1.5px solid var(--accent);border-radius:14px;padding:12px;display:grid;gap:8px;margin-top:4px"><b>'+f[1]+'</b>'+
+        '<input type="number" inputmode="decimal" id="qfAmt" class="amount" placeholder="المبلغ">'+
+        '<input type="text" id="qfNote" placeholder="'+esc(f[2])+'">'+
+        (f[0]!=='deposit'?'<label class="check"><input type="checkbox" id="qfFixed"> يتكرر كل شهر</label>':'')+
+        '<div class="note good small" id="qfEff">'+effectText({kind:f[0],member:mid,amount:0})+'</div>'+
+        '<div class="row"><button type="button" class="btn pri" id="qfSave" style="flex:1">حفظ</button><button type="button" class="btn" id="qfCancel">إلغاء</button></div></div>';
+      var a=box.querySelector('#qfAmt');a.focus();
+      a.addEventListener('input',function(){box.querySelector('#qfEff').innerHTML=effectText({kind:f[0],member:mid,amount:+a.value||0});});
+      box.querySelector('#qfCancel').addEventListener('click',function(){box.innerHTML='';});
+      function save(){var v=r2(+a.value);if(!(v>0)){a.focus();toast('اكتب المبلغ');return;}
+        var d={month:S.sel,kind:f[0],member:mid,amount:v,note:box.querySelector('#qfNote').value.trim(),seq:Date.now(),createdAt:new Date().toISOString(),by:S.uid||''};
+        var fx=box.querySelector('#qfFixed');if(fx&&fx.checked)d.fixed=true;
+        box.querySelector('#qfSave').disabled=true;
+        S.db.collection('tx').doc().set(d).then(function(){quickSheet(mid);}).catch(function(e){toast(errMsg(e));box.querySelector('#qfSave').disabled=false;});}
+      box.querySelector('#qfSave').addEventListener('click',save);
+      box.querySelector('#qfNote').addEventListener('keydown',function(e){if(e.key==='Enter')save();});
+    }
+    Object.keys(forms).forEach(function(k){var b=el.querySelector('#'+k);if(b)b.addEventListener('click',function(){showForm(k);});});
+    if(openForm)showForm(openForm);
+    var qe=el.querySelector('#qEx');if(qe)qe.addEventListener('click',function(){
       var list=(mo.exempt||[]).filter(function(i){return i!==mid;});if(!ex)list.push(mid);
-      S.db.collection('months').doc(S.sel).update({exempt:list}).then(function(){closeSheet();toast(ex?'أُلغي الإعفاء':'أُعفي '+m.name+' هذا الشهر');}).catch(function(e){toast(errMsg(e));});
+      S.db.collection('months').doc(S.sel).update({exempt:list}).then(function(){quickSheet(mid);}).catch(function(e){toast(errMsg(e));});
     });
   });
 }
