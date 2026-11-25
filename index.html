@@ -203,7 +203,7 @@ svg.line text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
 <div class="app">
   <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
   <header class="top">
-    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 14</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
+    <div class="brand"><div class="logo" aria-hidden="true">ج</div><div><h1>جمعية البيت <span class="pill acc" title="رقم الإصدار" style="font-family:var(--font-body);font-size:12px;vertical-align:middle">إصدار 15</span></h1><div class="sync" id="sync"><span class="dot"></span><span>جارٍ الاتصال…</span></div></div></div>
     <button class="btn sm" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي">الوضع الليلي</button>
   </header>
   <main id="view"><div class="card empty">جارٍ تحميل بيانات الجمعية…</div></main>
@@ -1087,7 +1087,7 @@ var SR={q:'',mem:'',kind:''};
 function searchCard(){
   var ms=(S.config.members||[]);
   return '<section class="card" style="display:grid;gap:10px"><div class="card-h" style="margin:0"><h2>بحث في الحركات</h2><span class="small muted">كل الأشهر</span></div>'+
-  '<input type="search" id="srQ" placeholder="اكتب كلمة: كهرباء، عبير، تسديد…" value="'+esc(SR.q)+'">'+
+  '<input type="search" id="srQ" placeholder="اكتب كلمة: كهرباء، علاج، تسديد…" value="'+esc(SR.q)+'">'+
   '<div class="row"><select id="srM" style="flex:1"><option value="">كل الأعضاء</option>'+ms.map(function(m){return '<option value="'+esc(m.id)+'"'+(SR.mem===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select>'+
   '<select id="srK" style="flex:1"><option value="">كل الأنواع</option>'+['deposit','expense','payout','onbehalf','external','adjust'].map(function(k){return '<option value="'+k+'"'+(SR.kind===k?' selected':'')+'>'+KTXT[k].short+'</option>';}).join('')+'</select></div>'+
   '<div id="srOut"></div></section>';
